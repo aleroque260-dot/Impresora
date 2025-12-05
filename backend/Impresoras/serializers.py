@@ -10,26 +10,91 @@ from .models import (
 
 
 # ====================
-# USER SERIALIZERS
+# SERIALIZERS BÁSICOS (SIN RECURSIÓN)
 # ====================
 
+class SimpleUserProfileSerializer(serializers.ModelSerializer):
+    """Serializer SIMPLE para UserProfile (sin recursión)"""
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    
+    class Meta:
+        model = UserProfile
+        fields = ['id', 'role', 'role_display', 'department', 'department_name', 
+                 'student_id', 'phone', 'is_verified', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer para el modelo User de Django"""
-    profile = serializers.SerializerMethodField()
+    """Serializer para el modelo User de Django - VERSIÓN CORREGIDA"""
+    profile_data = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 
+                 'is_active', 'is_staff', 'date_joined', 'last_login', 'profile_data']
+        read_only_fields = ['date_joined', 'last_login']
+    
+    def get_profile_data(self, obj):
+        """Obtiene los datos del UserProfile sin recursión"""
+        try:
+            profile = obj.profile
+            return SimpleUserProfileSerializer(profile).data
+        except UserProfile.DoesNotExist:
+            return None
+
+
+# ====================
+# SERIALIZER ESPECIAL PARA /api/users/me/
+# ====================
+
+class CurrentUserSerializer(serializers.ModelSerializer):
+    """Serializer ESPECÍFICO para la ruta /me/ - EVITA RECURSIÓN"""
+    profile = SimpleUserProfileSerializer(read_only=True)
     
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 
                  'is_active', 'is_staff', 'date_joined', 'last_login', 'profile']
-        read_only_fields = ['date_joined', 'last_login']
-    
-    def get_profile(self, obj):
-        """Obtiene el UserProfile asociado"""
-        try:
-            return UserProfileSerializer(obj.profile).data
-        except UserProfile.DoesNotExist:
-            return None
+        read_only_fields = ['id', 'date_joined', 'last_login']
 
+
+# ====================
+# USERPROFILE SERIALIZER CORREGIDO
+# ====================
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Serializer COMPLETO para UserProfile - VERSIÓN CORREGIDA"""
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    full_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    
+    class Meta:
+        model = UserProfile
+        fields = ['id', 'user_id', 'username', 'email', 'first_name', 'last_name', 
+                 'full_name', 'role', 'role_display', 'department', 'department_name',
+                 'student_id', 'phone', 'address', 'is_verified', 'max_concurrent_jobs',
+                 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def validate(self, data):
+        """Validación personalizada para UserProfile"""
+        if data.get('role') == UserRole.STUDENT and not data.get('student_id'):
+            raise serializers.ValidationError(
+                {"student_id": "Los estudiantes deben tener un carné de estudiante"}
+            )
+        return data
+
+
+# ====================
+# SERIALIZERS PARA CREACIÓN/ACTUALIZACIÓN
+# ====================
 
 class UserCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear usuarios"""
@@ -66,7 +131,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
 
 # ====================
-# MODEL SERIALIZERS
+# MODEL SERIALIZERS (MANTENER IGUAL)
 # ====================
 
 class DepartmentSerializer(serializers.ModelSerializer):
@@ -78,32 +143,6 @@ class DepartmentSerializer(serializers.ModelSerializer):
         model = Department
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
-
-
-class UserProfileSerializer(serializers.ModelSerializer):
-    """Serializer para UserProfile"""
-    user = UserSerializer(read_only=True)
-    user_id = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), 
-        source='user',
-        write_only=True,
-        required=False
-    )
-    full_name = serializers.CharField(source='user.get_full_name', read_only=True)
-    email = serializers.CharField(source='user.email', read_only=True)
-    
-    class Meta:
-        model = UserProfile
-        fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at']
-    
-    def validate(self, data):
-        """Validación personalizada para UserProfile"""
-        if data.get('role') == UserRole.STUDENT and not data.get('student_id'):
-            raise serializers.ValidationError(
-                {"student_id": "Los estudiantes deben tener un carné de estudiante"}
-            )
-        return data
 
 
 class PrinterSerializer(serializers.ModelSerializer):
@@ -203,7 +242,7 @@ class PrintJobSerializer(serializers.ModelSerializer):
 
 class PrintJobStatusUpdateSerializer(serializers.Serializer):
     """Serializer para actualizar estado de PrintJob"""
-    status = serializers.ChoiceField(choices=JobStatus.choices)  # ← CORREGIDO
+    status = serializers.ChoiceField(choices=JobStatus.choices)
     actual_hours = serializers.FloatField(required=False, min_value=0.1)
     error_message = serializers.CharField(required=False, allow_blank=True)
 
@@ -220,17 +259,23 @@ class SystemLogSerializer(serializers.ModelSerializer):
 
 
 # ====================
-# NESTED SERIALIZERS
+# NESTED SERIALIZERS (ACTUALIZADOS)
 # ====================
 
 class PrinterDetailSerializer(PrinterSerializer):
     """Serializer detallado para Printer con trabajos relacionados"""
     print_jobs = PrintJobSerializer(many=True, read_only=True)
-    user_assignments = UserPrinterAssignmentSerializer(many=True, read_only=True, source='user_assignments')
+    user_assignments = UserPrinterAssignmentSerializer(many=True, read_only=True)
 
 
-class UserDetailSerializer(UserSerializer):
-    """Serializer detallado para User con todas las relaciones"""
-    print_jobs = PrintJobSerializer(many=True, read_only=True, source='print_jobs')
-    printer_assignments = UserPrinterAssignmentSerializer(many=True, read_only=True, source='printer_assignments')
-    pricing_profile = UserPricingProfileSerializer(read_only=True, source='pricing_profile')
+class UserDetailSerializer(serializers.ModelSerializer):
+    """Serializer detallado para User - VERSIÓN SIN RECURSIÓN"""
+    profile = SimpleUserProfileSerializer(read_only=True)
+    print_jobs = PrintJobSerializer(many=True, read_only=True)
+    printer_assignments = UserPrinterAssignmentSerializer(many=True, read_only=True)
+    pricing_profile = UserPricingProfileSerializer(read_only=True)
+    
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 
+                 'profile', 'print_jobs', 'printer_assignments', 'pricing_profile']

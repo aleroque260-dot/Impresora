@@ -61,6 +61,8 @@ class IsAdminOrTechnician(permissions.BasePermission):
 # VIEWSETS
 # ====================
 
+# EN EL ARCHIVO views.py, REEMPLAZA SOLO EL UserViewSet:
+
 class UserViewSet(viewsets.ModelViewSet):
     """ViewSet para manejar usuarios"""
     queryset = User.objects.all().order_by('-date_joined')
@@ -75,6 +77,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserCreateSerializer
         elif self.action in ['update', 'partial_update']:
             return UserUpdateSerializer
+        elif self.action == 'me':
+            return CurrentUserSerializer  # ¡NUEVO! Usa CurrentUserSerializer para /me/
         return UserSerializer
     
     def get_permissions(self):

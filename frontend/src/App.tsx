@@ -10,7 +10,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import PrintersList from './pages/PrintersList';
-import Profile from './pages/Profile';
+import Profile from './pages/Profile';   
 import NotFound from './pages/NotFound';
 import AdminUsers from './pages/admin/AdminUsers'
 // Componentes de ejemplo
