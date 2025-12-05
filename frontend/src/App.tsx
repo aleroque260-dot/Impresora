@@ -12,7 +12,7 @@ import Dashboard from './pages/Dashboard';
 import PrintersList from './pages/PrintersList';
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
-
+import AdminUsers from './pages/admin/AdminUsers'
 // Componentes de ejemplo
 const PrintJobs = () => <div className="p-6">Trabajos de Impresión</div>;
 const Users = () => <div className="p-6">Usuarios</div>;
@@ -47,6 +47,7 @@ function App() {
 
               {/* Rutas solo para administradores */}
               <Route element={<ProtectedRoute requiredRoles={['ADM']} />}>
+                <Route path="/admin/users" element={<AdminUsers />} /> {/* <-- AGREGA ESTA LÍNEA */}
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>
