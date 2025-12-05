@@ -99,13 +99,13 @@ export const authService = {
       
       switch (user.profile.role) {
         case 'ADM':
-          return ['ADM', 'TEC', 'TEA', 'STU', 'EXT'];
+          return ['ADM', 'TEC', 'PRO', 'EST', 'EXT'];
         case 'TEC':
-          return ['TEC', 'TEA', 'STU', 'EXT'];
-        case 'TEA':
-          return ['TEA', 'STU'];
-        case 'STU':
-          return ['STU'];
+          return ['TEC', 'EST', 'PRO', 'EXT'];
+        case 'PRO':
+          return ['PRO', 'EST'];
+        case 'EST':
+          return ['EST'];
         case 'EXT':
           return ['EXT'];
         default:

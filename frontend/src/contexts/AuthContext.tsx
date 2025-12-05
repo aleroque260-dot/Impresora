@@ -40,8 +40,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   useEffect(() => {
     const checkAuthStatus = async () => {
       const token = localStorage.getItem('access_token');
-      
+        console.log('🔍 AuthContext - Token en localStorage:', token);
       if (!token || !authService.isTokenValid()) {
+        console.log('🔍 AuthContext - No hay token válido');
         setAuthState(prev => ({
           ...prev,
           isLoading: false,
@@ -51,7 +52,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       
       try {
+          console.log('🔍 AuthContext - Obteniendo usuario...');
         const user = await authService.getCurrentUser();
+          console.log('🔍 AuthContext - Usuario obtenido:', user);
         setAuthState(prev => ({
           ...prev,
           user,
@@ -60,6 +63,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }));
         localStorage.setItem('user', JSON.stringify(user));
       } catch (error) {
+        console.error('🔍 AuthContext - Error obteniendo usuario:', error);
         // Token inválido, limpiar
         authService.logout();
         setAuthState(prev => ({

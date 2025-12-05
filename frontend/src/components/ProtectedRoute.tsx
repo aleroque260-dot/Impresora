@@ -1,10 +1,10 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import LoadingSpinner from './LoadingSpinner';
+import { UserRole } from '../types/auth';
 
 interface ProtectedRouteProps {
-  requiredRoles?: string[];
+  requiredRoles?: UserRole[];
   children?: React.ReactNode;
 }
 
@@ -17,7 +17,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -28,9 +28,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Verificar roles si se especifican
   if (requiredRoles.length > 0 && user) {
-    const hasRequiredRole = requiredRoles.includes(user.profile.role);
+    const userRole = user.profile?.role || UserRole.STUDENT;
+    const hasRequiredRole = requiredRoles.includes(userRole);
+    
     if (!hasRequiredRole) {
-      return <Navigate to="/dashboard" replace />;
+      return <Navigate to="/" replace />;
     }
   }
 
