@@ -86,58 +86,81 @@ class UserViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]  # Cualquiera puede registrarse
         return super().get_permissions()
     
-    @action(detail=False, methods=['get', 'patch', 'put'])  # ¡AGREGA PATCH Y PUT!
+    @action(detail=False, methods=['get', 'patch', 'put'])
     def me(self, request):
-        """Obtiene o actualiza información del usuario actual"""
+        """Obtiene o actualiza información del usuario actual - VERSIÓN CORREGIDA"""
+        user = request.user
+        
         if request.method == 'GET':
-            serializer = self.get_serializer(request.user)
+            serializer = self.get_serializer(user)
             return Response(serializer.data)
         
         elif request.method in ['PATCH', 'PUT']:
-            # Actualizar usuario
-            user = request.user
-            user_data = {
-                'first_name': request.data.get('first_name', user.first_name),
-                'last_name': request.data.get('last_name', user.last_name),
-                'email': request.data.get('email', user.email),
-            }
+            # 1. Preparar datos del usuario (nivel superior)
+            user_data = {}
+            if 'first_name' in request.data:
+                user_data['first_name'] = request.data['first_name']
+            if 'last_name' in request.data:
+                user_data['last_name'] = request.data['last_name']
+            if 'email' in request.data:
+                user_data['email'] = request.data['email']
             
-            serializer = UserUpdateSerializer(user, data=user_data, partial=True)
+            # 2. Preparar datos del perfil
+            profile_data = {}
+            profile_fields_to_update = ['phone', 'address', 'student_id']
+            for field in profile_fields_to_update:
+                if field in request.data:
+                    profile_data[field] = request.data[field]
             
-            if serializer.is_valid():
-                serializer.save()
-                
-                # Actualizar perfil si hay datos
-                profile_data = {}
-                if 'phone' in request.data:
-                    profile_data['phone'] = request.data['phone']
-                if 'address' in request.data:
-                    profile_data['address'] = request.data['address']
-                if 'student_id' in request.data:
-                    profile_data['student_id'] = request.data['student_id']
-                
-                if profile_data:
-                    try:
-                        profile = user.profile
-                        profile_serializer = SimpleUserProfileSerializer(
-                            profile, 
-                            data=profile_data, 
-                            partial=True
-                        )
-                        if profile_serializer.is_valid():
-                            profile_serializer.save()
-                    except UserProfile.DoesNotExist:
-                        # Crear perfil si no existe
-                        profile_data['user'] = user
-                        profile_data['role'] = UserProfile.UserRole.STUDENT
-                        UserProfile.objects.create(**profile_data)
-                
-                # Devolver usuario actualizado
-                updated_user = User.objects.get(id=user.id)
-                response_serializer = CurrentUserSerializer(updated_user)
-                return Response(response_serializer.data)
+            errors = {}
             
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # 3. Actualizar datos del usuario (si hay)
+            if user_data:
+                user_serializer = UserUpdateSerializer(user, data=user_data, partial=True)
+                if user_serializer.is_valid():
+                    user_serializer.save()
+                else:
+                    errors.update(user_serializer.errors)
+            
+            # 4. Actualizar perfil (si hay datos y el perfil existe)
+            if profile_data:
+                try:
+                    # Obtener el perfil existente
+                    profile = user.profile
+                    
+                    # ¡IMPORTANTE! Preservar datos existentes que no queremos cambiar
+                    # No sobrescribir role, is_verified, department, etc.
+                    profile_serializer = SimpleUserProfileSerializer(
+                        profile, 
+                        data=profile_data, 
+                        partial=True
+                    )
+                    
+                    if profile_serializer.is_valid():
+                        # Guardar solo los campos que vienen en profile_data
+                        # No tocamos role, is_verified, department, etc.
+                        for field, value in profile_data.items():
+                            setattr(profile, field, value)
+                        profile.save()
+                    else:
+                        errors.update(profile_serializer.errors)
+                        
+                except UserProfile.DoesNotExist:
+                    # Si no existe perfil, ¡NO CREARLO AQUÍ!
+                    # Dejar que se maneje por signals o administración manual
+                    # Para evitar crear perfiles con valores por defecto que sobrescriban
+                    # Campos importantes como role, is_verified, etc.
+                    pass
+            
+            # 5. Si hay errores, devolverlos
+            if errors:
+                return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 6. Devolver usuario actualizado
+            # Recargar usuario de la base de datos para obtener todos los datos actualizados
+            updated_user = User.objects.get(id=user.id)
+            response_serializer = CurrentUserSerializer(updated_user)
+            return Response(response_serializer.data)
     
     @action(detail=True, methods=['post'])
     def set_password(self, request, pk=None):
@@ -160,7 +183,6 @@ class UserViewSet(viewsets.ModelViewSet):
             user.save()
             return Response({"detail": "Contraseña cambiada correctamente"})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
     # En views.py, agrega esta clase:
 class UserProfileUpdateView(APIView):
     """Vista específica para actualizar perfil de usuario"""

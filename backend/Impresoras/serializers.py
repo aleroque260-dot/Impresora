@@ -10,30 +10,31 @@ from .models import (
 
 
 # ====================
-# SERIALIZERS BÁSICOS (SIN RECURSIÓN)
+# SERIALIZERS BÁSICOS (SIN RECURSIÓN) - CORREGIDOS
 # ====================
 
 class SimpleUserProfileSerializer(serializers.ModelSerializer):
-    """Serializer SIMPLE para UserProfile (sin recursión)"""
+    """Serializer SIMPLE para UserProfile (sin recursión) - VERSIÓN SEGURA"""
     department_name = serializers.CharField(source='department.name', read_only=True)
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     
     class Meta:
         model = UserProfile
         fields = ['id', 'role', 'role_display', 'department', 'department_name', 
-                 'student_id', 'phone', 'is_verified', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
+                 'student_id', 'phone', 'address', 'is_verified', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'role', 'department', 'is_verified', 'created_at', 'updated_at']
+        # ¡IMPORTANTE! Campos protegidos contra modificación
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer para el modelo User de Django - VERSIÓN CORREGIDA"""
+    """Serializer para el modelo User de Django"""
     profile_data = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 
                  'is_active', 'is_staff', 'date_joined', 'last_login', 'profile_data']
-        read_only_fields = ['date_joined', 'last_login']
+        read_only_fields = ['id', 'is_active', 'is_staff', 'date_joined', 'last_login']
     
     def get_profile_data(self, obj):
         """Obtiene los datos del UserProfile sin recursión"""
@@ -45,7 +46,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 # ====================
-# SERIALIZER ESPECIAL PARA /api/users/me/
+# SERIALIZER ESPECIAL PARA /api/users/me/ - CORREGIDO
 # ====================
 
 class CurrentUserSerializer(serializers.ModelSerializer):
@@ -56,15 +57,15 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 
                  'is_active', 'is_staff', 'date_joined', 'last_login', 'profile']
-        read_only_fields = ['id', 'date_joined', 'last_login']
+        read_only_fields = ['id', 'username', 'is_active', 'is_staff', 'date_joined', 'last_login']
 
 
 # ====================
-# USERPROFILE SERIALIZER CORREGIDO
+# USERPROFILE SERIALIZER CORREGIDO - VERSIÓN SEGURA
 # ====================
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    """Serializer COMPLETO para UserProfile - VERSIÓN CORREGIDA"""
+    """Serializer COMPLETO para UserProfile - VERSIÓN SEGURA"""
     user_id = serializers.IntegerField(source='user.id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.CharField(source='user.email', read_only=True)
@@ -81,14 +82,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
                  'full_name', 'role', 'role_display', 'department', 'department_name',
                  'student_id', 'phone', 'address', 'is_verified', 'max_concurrent_jobs',
                  'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['id', 'user_id', 'username', 'email', 'first_name', 'last_name',
+                           'full_name', 'role', 'department', 'is_verified', 
+                           'max_concurrent_jobs', 'created_at', 'updated_at']
     
     def validate(self, data):
         """Validación personalizada para UserProfile"""
-        if data.get('role') == UserRole.STUDENT and not data.get('student_id'):
-            raise serializers.ValidationError(
-                {"student_id": "Los estudiantes deben tener un carné de estudiante"}
-            )
+        # Solo validar si estamos creando/actualizando student_id
+        if 'student_id' in data and data.get('student_id'):
+            # Verificar si el usuario tiene rol de estudiante
+            instance = self.instance
+            if instance and instance.role == UserRole.STUDENT and not data.get('student_id'):
+                raise serializers.ValidationError(
+                    {"student_id": "Los estudiantes deben tener un carné de estudiante"}
+                )
         return data
 
 
@@ -124,10 +131,40 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
-    """Serializer para actualizar usuarios"""
+    """Serializer para actualizar usuarios - VERSIÓN MEJORADA"""
+    phone = serializers.CharField(source='profile.phone', required=False, allow_blank=True)
+    address = serializers.CharField(source='profile.address', required=False, allow_blank=True)
+    student_id = serializers.CharField(source='profile.student_id', required=False, allow_blank=True)
+    
     class Meta:
         model = User
-        fields = ['email', 'first_name', 'last_name', 'is_active']
+        fields = ['email', 'first_name', 'last_name', 'phone', 'address', 'student_id']
+    
+    def update(self, instance, validated_data):
+        # Extraer datos del perfil si existen
+        profile_data = {}
+        if 'profile' in validated_data:
+            profile_data = validated_data.pop('profile')
+        
+        # Actualizar usuario
+        instance = super().update(instance, validated_data)
+        
+        # Actualizar perfil si hay datos
+        if profile_data:
+            try:
+                profile = instance.profile
+                for key, value in profile_data.items():
+                    if value is not None:  # Solo actualizar si hay valor
+                        setattr(profile, key, value)
+                profile.save()
+            except UserProfile.DoesNotExist:
+                # Si no existe perfil, crear uno básico
+                UserProfile.objects.create(
+                    user=instance,
+                    **profile_data
+                )
+        
+        return instance
 
 
 # ====================
