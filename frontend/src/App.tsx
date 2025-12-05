@@ -5,17 +5,21 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
 // Páginas
-import Home from './pages/Home'; // <-- NUEVA PÁGINA
+import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import PrintersList from './pages/PrintersList';
 import Profile from './pages/Profile';   
 import NotFound from './pages/NotFound';
-import AdminUsers from './pages/admin/AdminUsers'
+
+// User Management Pages
+import UserList from './pages/users/UserList'; // <-- IMPORTAR
+import UserCreateEdit from './pages/users/UserCreateEdit'; // <-- IMPORTAR
+import UserDetail from './pages/users/UserDetail'; // <-- IMPORTAR
+
 // Componentes de ejemplo
 const PrintJobs = () => <div className="p-6">Trabajos de Impresión</div>;
-const Users = () => <div className="p-6">Usuarios</div>;
 const Reports = () => <div className="p-6">Reportes</div>;
 const Settings = () => <div className="p-6">Configuración</div>;
 
@@ -25,7 +29,7 @@ function App() {
       <AuthProvider>
         <Routes>
           {/* Página principal pública */}
-          <Route path="/" element={<Home />} /> {/* <-- CAMBIO AQUÍ */}
+          <Route path="/" element={<Home />} />
           
           {/* Rutas de autenticación */}
           <Route path="/login" element={<Login />} />
@@ -34,20 +38,22 @@ function App() {
           {/* Rutas protegidas con layout */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout><Outlet /></Layout>}>
-              <Route path="/dashboard" element={<Dashboard />} /> {/* <-- CAMBIO: de "/" a "/dashboard" */}
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/printers" element={<PrintersList />} />
               <Route path="/print-jobs" element={<PrintJobs />} />
               <Route path="/profile" element={<Profile />} />
               
               {/* Rutas solo para administradores y técnicos */}
               <Route element={<ProtectedRoute requiredRoles={['ADM', 'TEC']} />}>
-                <Route path="/users" element={<Users />} />
+                <Route path="/users" element={<UserList />} /> {/* <-- COMPONENTE REAL */}
+                <Route path="/users/create" element={<UserCreateEdit />} />
+                <Route path="/users/edit/:id" element={<UserCreateEdit />} />
+                <Route path="/users/:id" element={<UserDetail />} />
                 <Route path="/reports" element={<Reports />} />
               </Route>
 
               {/* Rutas solo para administradores */}
               <Route element={<ProtectedRoute requiredRoles={['ADM']} />}>
-                <Route path="/admin/users" element={<AdminUsers />} /> {/* <-- AGREGA ESTA LÍNEA */}
                 <Route path="/settings" element={<Settings />} />
               </Route>
             </Route>

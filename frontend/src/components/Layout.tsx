@@ -15,7 +15,10 @@ import {
   Shield,
   Bell,
   UserCog,
-  HelpCircle
+  HelpCircle,
+  Upload,
+  History,
+  Clock
 } from 'lucide-react';
 import { ROLE_LABELS, ROLE_COLORS, UserRole } from '../types/auth';
 
@@ -49,20 +52,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/'); // Redirigir a Home, no a Login
+    navigate('/');
   };
 
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Impresoras', href: '/printers', icon: Printer },
-    { name: 'Trabajos', href: '/print-jobs', icon: FileText },
-    { name: 'Usuarios', href: '/users', icon: Users, roles: [UserRole.ADMIN, UserRole.TECHNICIAN] },
-    { name: 'Admin Usuarios', href: '/admin/users', icon: UserCog, roles: [UserRole.ADMIN] },
-    { name: 'Reportes', href: '/reports', icon: BarChart3, roles: [UserRole.ADMIN, UserRole.TECHNICIAN] },
-    { name: 'Configuración', href: '/settings', icon: Settings, roles: [UserRole.ADMIN] },
-  ];
-
-  // Función para obtener role
   const getUserRole = (): UserRole => {
     if (!user || !user.profile) {
       return UserRole.STUDENT;
@@ -70,21 +62,58 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return user.profile.role;
   };
 
+  const userRole = getUserRole();
+  const isAdmin = userRole === UserRole.ADMIN;
+  const isTechnician = userRole === UserRole.TECHNICIAN;
+  const isProfessor = userRole === UserRole.TEACHER;
+  const isStudent = userRole === UserRole.STUDENT;
+  const isExternal = userRole === UserRole.EXTERNAL;
+
+  // Navegación según el rol
+  const getNavigation = () => {
+    const baseNavigation = [
+      { name: 'Dashboard', href: '/dashboard', icon: Home, roles: [UserRole.ADMIN, UserRole.TECHNICIAN, UserRole.TEACHER, UserRole.STUDENT, UserRole.EXTERNAL] },
+    ];
+
+    // Para usuarios normales (no admin)
+    const userNavigation = [
+      { name: 'Subir Trabajo', href: '/upload', icon: Upload, roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL] },
+      { name: 'Mis Trabajos', href: '/my-jobs', icon: FileText, roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL] },
+      { name: 'Pendientes', href: '/pending', icon: Clock, roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL] },
+      { name: 'Historial', href: '/history', icon: History, roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL] },
+    ];
+
+    // Solo para administradores y técnicos
+    const adminNavigation = [
+      { name: 'Impresoras', href: '/printers', icon: Printer, roles: [UserRole.ADMIN, UserRole.TECHNICIAN] },
+      { name: 'Trabajos', href: '/print-jobs', icon: FileText, roles: [UserRole.ADMIN, UserRole.TECHNICIAN] },
+      { name: 'Usuarios', href: '/users', icon: Users, roles: [UserRole.ADMIN] },
+      { name: 'Admin Usuarios', href: '/admin/users', icon: UserCog, roles: [UserRole.ADMIN] },
+      { name: 'Reportes', href: '/reports', icon: BarChart3, roles: [UserRole.ADMIN, UserRole.TECHNICIAN] },
+      { name: 'Configuración', href: '/settings', icon: Settings, roles: [UserRole.ADMIN] },
+    ];
+
+    // Combinar navegación según rol
+    if (isAdmin || isTechnician) {
+      return [...baseNavigation, ...adminNavigation];
+    } else {
+      return [...baseNavigation, ...userNavigation];
+    }
+  };
+
+  const navigation = getNavigation();
+
+  // Filtrar navegación según rol
   const filteredNavigation = navigation.filter(item => {
     if (!item.roles) return true;
-    
-    const userRole = getUserRole();
-    const allowedRoles = item.roles as UserRole[];
-    
-    return allowedRoles.includes(userRole);
+    return item.roles.includes(userRole);
   });
 
   const isActive = (path: string) => {
-    return location.pathname === path;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   // Obtener datos del usuario
-  const userRole = getUserRole();
   const roleLabel = ROLE_LABELS[userRole] || 'Usuario';
   const roleColor = ROLE_COLORS[userRole] || 'bg-gray-100 text-gray-800';
 
@@ -118,7 +147,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <div className="flex items-center ml-4 lg:ml-0">
                 <Printer className="h-8 w-8 text-blue-600" />
                 <span className="ml-2 text-xl font-semibold text-gray-900 hidden sm:block">
-                  Gestión de Impresoras 3D
+                  {isAdmin || isTechnician ? 'Admin - Impresoras 3D' : 'Mis Impresiones 3D'}
                 </span>
               </div>
             </div>
@@ -150,14 +179,29 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                       <h3 className="font-semibold text-gray-900">Notificaciones</h3>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
-                      <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                        <p className="text-sm font-medium text-gray-900">Nuevo trabajo pendiente</p>
-                        <p className="text-xs text-gray-500">Hace 5 minutos</p>
-                      </div>
-                      <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                        <p className="text-sm font-medium text-gray-900">Impresora necesita mantenimiento</p>
-                        <p className="text-xs text-gray-500">Hace 2 horas</p>
-                      </div>
+                      {isAdmin || isTechnician ? (
+                        <>
+                          <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                            <p className="text-sm font-medium text-gray-900">Nueva impresión solicitada</p>
+                            <p className="text-xs text-gray-500">Hace 5 minutos</p>
+                          </div>
+                          <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                            <p className="text-sm font-medium text-gray-900">Impresora necesita mantenimiento</p>
+                            <p className="text-xs text-gray-500">Hace 2 horas</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                            <p className="text-sm font-medium text-gray-900">Tu trabajo está en impresión</p>
+                            <p className="text-xs text-gray-500">Hace 15 minutos</p>
+                          </div>
+                          <div className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                            <p className="text-sm font-medium text-gray-900">Impresión completada</p>
+                            <p className="text-xs text-gray-500">Ayer, 14:30</p>
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div className="border-t border-gray-100 px-4 py-2">
                       <button className="text-sm text-blue-600 hover:text-blue-800 w-full text-center">
@@ -177,7 +221,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   aria-expanded={profileMenuOpen}
                 >
                   <div className="flex items-center space-x-2 sm:space-x-3">
-                    <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      isAdmin ? 'bg-purple-100 text-purple-600' :
+                      isTechnician ? 'bg-orange-100 text-orange-600' :
+                      isProfessor ? 'bg-green-100 text-green-600' :
+                      'bg-blue-100 text-blue-600'
+                    }`}>
                       <User size={18} />
                     </div>
                     <div className="hidden md:block text-left">
@@ -199,6 +248,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         {user.first_name} {user.last_name}
                       </p>
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                      <span className={`text-xs ${roleColor} px-2 py-1 rounded-full inline-block mt-2`}>
+                        {roleLabel}
+                      </span>
                     </div>
                     
                     <div className="py-1">
@@ -220,7 +272,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         Dashboard
                       </Link>
                       
-                      {user.profile?.role === 'ADM' && (
+                      {isAdmin && (
                         <Link
                           to="/admin/users"
                           onClick={() => setProfileMenuOpen(false)}
@@ -272,9 +324,14 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     >
                       <Icon size={20} className="mr-3 flex-shrink-0" />
                       {item.name}
-                      {item.name === 'Admin Usuarios' && (
+                      {(item.name === 'Admin Usuarios' || item.name === 'Usuarios') && isAdmin && (
                         <span className="ml-auto px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full">
                           Admin
+                        </span>
+                      )}
+                      {(item.name === 'Impresoras' || item.name === 'Reportes') && (isAdmin || isTechnician) && (
+                        <span className="ml-auto px-2 py-0.5 text-xs bg-orange-100 text-orange-800 rounded-full">
+                          {isAdmin ? 'Admin' : 'Técnico'}
                         </span>
                       )}
                     </Link>
@@ -288,10 +345,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <Shield className="h-5 w-5 text-gray-400 flex-shrink-0" />
                 <div className="ml-3">
                   <p className="text-sm font-medium text-gray-700 truncate">
-                    Sistema Seguro
+                    Sistema {isAdmin || isTechnician ? 'Administrativo' : 'Usuario'}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {new Date().getFullYear()} © Escuela
+                    {new Date().getFullYear()} • {roleLabel}
                   </p>
                 </div>
               </div>
@@ -312,7 +369,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <div className="flex items-center px-4 mb-6">
                   <Printer className="h-8 w-8 text-blue-600 flex-shrink-0" />
                   <span className="ml-2 text-lg font-semibold text-gray-900 truncate">
-                    Impresoras 3D
+                    {isAdmin || isTechnician ? 'Admin 3D' : 'Mis Impresiones'}
                   </span>
                   <button
                     onClick={() => setSidebarOpen(false)}
@@ -349,7 +406,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               
               <div className="flex-shrink-0 border-t border-gray-200 p-4">
                 <div className="flex items-center mb-4">
-                  <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    isAdmin ? 'bg-purple-100 text-purple-600' :
+                    isTechnician ? 'bg-orange-100 text-orange-600' :
+                    isProfessor ? 'bg-green-100 text-green-600' :
+                    'bg-blue-100 text-blue-600'
+                  }`}>
                     <User size={20} />
                   </div>
                   <div className="ml-3">
@@ -386,12 +448,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex flex-col md:flex-row justify-between items-center">
                 <p className="text-sm text-gray-500">
-                  Sistema de Gestión de Impresoras 3D • Versión 1.0.0
+                  Sistema de Gestión de Impresión 3D • Versión 1.0.0 • {roleLabel}
                 </p>
                 <div className="flex items-center space-x-4 mt-2 md:mt-0">
-                  <a href="#" className="text-sm text-gray-500 hover:text-gray-700">Ayuda</a>
-                  <a href="#" className="text-sm text-gray-500 hover:text-gray-700">Términos</a>
-                  <a href="#" className="text-sm text-gray-500 hover:text-gray-700">Privacidad</a>
+                  <Link to="/help" className="text-sm text-gray-500 hover:text-gray-700">Ayuda</Link>
+                  <Link to="/contact" className="text-sm text-gray-500 hover:text-gray-700">Contacto</Link>
+                  <span className="text-sm text-gray-400">•</span>
+                  <span className="text-sm text-gray-500">
+                    Usuario: {user.username}
+                  </span>
                 </div>
               </div>
             </div>
