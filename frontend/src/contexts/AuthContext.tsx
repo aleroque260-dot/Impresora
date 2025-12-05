@@ -11,6 +11,7 @@ interface AuthContextType extends AuthState {
   updateUser: (userData: Partial<User>) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   checkAuth: () => Promise<void>;
+  isAdmin?: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

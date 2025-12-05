@@ -4,19 +4,27 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
-// Páginas
+// Páginas publicas
 import Home from './pages/Home';
 import Login from './pages/Login';
-import Register from './pages/Register';
+import NotFound from './pages/NotFound';
+
+// Páginas para usuarios
 import Dashboard from './pages/Dashboard';
 import PrintersList from './pages/PrintersList';
 import Profile from './pages/Profile';   
-import NotFound from './pages/NotFound';
+import UploadJob from './pages/UploadJob';
+import JobHistory from './pages/JobHistory';
+import PendingJobs from './pages/PendingJobs';
+import Help from './pages/Help';
+import Contact from './pages/Contact';
+
 
 // User Management Pages
 import UserList from './pages/users/UserList'; // <-- IMPORTAR
 import UserCreateEdit from './pages/users/UserCreateEdit'; // <-- IMPORTAR
 import UserDetail from './pages/users/UserDetail'; // <-- IMPORTAR
+
 
 // Componentes de ejemplo
 const PrintJobs = () => <div className="p-6">Trabajos de Impresión</div>;
@@ -33,7 +41,7 @@ function App() {
           
           {/* Rutas de autenticación */}
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          
           
           {/* Rutas protegidas con layout */}
           <Route element={<ProtectedRoute />}>
@@ -41,7 +49,12 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/printers" element={<PrintersList />} />
               <Route path="/print-jobs" element={<PrintJobs />} />
+              <Route path="/upload" element={<UploadJob />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/job-history" element={<JobHistory />} />
+              <Route path="/pending-jobs" element={<PendingJobs />} />
+              <Route path="/help" element={<Help />} />
+              <Route path="/contact" element={<Contact />} />
               
               {/* Rutas solo para administradores y técnicos */}
               <Route element={<ProtectedRoute requiredRoles={['ADM', 'TEC']} />}>

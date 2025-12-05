@@ -1,11 +1,9 @@
-// src/pages/UploadJob.tsx
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
 import { 
   Upload, 
   FileText, 
@@ -16,8 +14,10 @@ import {
   Info,
   Clock,
   DollarSign,
-  Shield
+  Shield,
+  ArrowLeft
 } from 'lucide-react';
+import { uploadJob, handleApiError, formatFileSize } from '../services/api';
 
 const uploadSchema = yup.object({
   job_name: yup.string().required('El nombre del trabajo es requerido'),
@@ -50,7 +50,6 @@ const UploadJob: React.FC = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validar tipo de archivo
       const validTypes = ['.stl', '.obj', '.gcode', '.3mf'];
       const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
       
@@ -59,7 +58,6 @@ const UploadJob: React.FC = () => {
         return;
       }
 
-      // Validar tamaño (máximo 100MB)
       if (file.size > 100 * 1024 * 1024) {
         setError('El archivo es demasiado grande. Máximo 100MB.');
         return;
@@ -86,7 +84,6 @@ const UploadJob: React.FC = () => {
     setSuccess('');
 
     try {
-      // Crear FormData para la subida
       const formData = new FormData();
       formData.append('job_name', data.job_name);
       formData.append('file', selectedFile);
@@ -95,27 +92,8 @@ const UploadJob: React.FC = () => {
       if (data.print_quality) formData.append('print_quality', data.print_quality);
       formData.append('supports_needed', data.supports_needed.toString());
 
-      // En desarrollo: Simular subida
-      await new Promise(resolve => {
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += 10;
-          setUploadProgress(progress);
-          if (progress >= 100) {
-            clearInterval(interval);
-            resolve(true);
-          }
-        }, 100);
-      });
-
-      // En producción:
-      // const response = await api.post('/print-jobs/', formData, {
-      //   headers: { 'Content-Type': 'multipart/form-data' },
-      //   onUploadProgress: (progressEvent) => {
-      //     const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total!);
-      //     setUploadProgress(percent);
-      //   }
-      // });
+      // Subir archivo al backend
+      const response = await uploadJob(formData);
 
       setSuccess('¡Trabajo subido exitosamente! Será revisado por un administrador.');
       
@@ -129,16 +107,10 @@ const UploadJob: React.FC = () => {
 
     } catch (err: any) {
       console.error('Error uploading file:', err);
-      setError(err.response?.data?.detail || 'Error al subir el archivo. Intenta nuevamente.');
+      setError(handleApiError(err));
     } finally {
       setIsUploading(false);
     }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' bytes';
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-    else return (bytes / 1048576).toFixed(1) + ' MB';
   };
 
   return (
@@ -154,8 +126,9 @@ const UploadJob: React.FC = () => {
         <div className="flex items-center gap-3">
           <Link
             to="/dashboard"
-            className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            className="flex items-center px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
+            <ArrowLeft className="h-4 w-4 mr-2" />
             Cancelar
           </Link>
         </div>
@@ -201,7 +174,7 @@ const UploadJob: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Archivo 3D *
             </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-primary-400 transition-colors">
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-blue-400 transition-colors">
               <div className="space-y-1 text-center">
                 {selectedFile ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -227,7 +200,7 @@ const UploadJob: React.FC = () => {
                       <div className="mt-3">
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div 
-                            className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${uploadProgress}%` }}
                           ></div>
                         </div>
@@ -241,7 +214,7 @@ const UploadJob: React.FC = () => {
                   <>
                     <Upload className="mx-auto h-12 w-12 text-gray-400" />
                     <div className="flex text-sm text-gray-600">
-                      <label className="relative cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500 focus-within:outline-none">
+                      <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
                         <span>Selecciona un archivo</span>
                         <input
                           type="file"
@@ -272,7 +245,7 @@ const UploadJob: React.FC = () => {
                 id="job_name"
                 type="text"
                 {...register('job_name')}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                   errors.job_name ? 'border-red-300' : 'border-gray-300'
                 } disabled:bg-gray-100`}
                 placeholder="Ej: Engranaje Motor v2"
@@ -290,7 +263,7 @@ const UploadJob: React.FC = () => {
               <select
                 id="filament_type"
                 {...register('filament_type')}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
                 disabled={isUploading}
               >
                 <option value="">Cualquier tipo</option>
@@ -311,7 +284,7 @@ const UploadJob: React.FC = () => {
               id="description"
               rows={3}
               {...register('description')}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
               placeholder="Describe el propósito o características especiales de esta impresión..."
               disabled={isUploading}
             />
@@ -325,7 +298,7 @@ const UploadJob: React.FC = () => {
               <select
                 id="print_quality"
                 {...register('print_quality')}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
                 disabled={isUploading}
               >
                 <option value="">Normal (0.2mm)</option>
@@ -341,7 +314,7 @@ const UploadJob: React.FC = () => {
                 id="supports_needed"
                 type="checkbox"
                 {...register('supports_needed')}
-                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 disabled={isUploading}
               />
               <label htmlFor="supports_needed" className="ml-3 block text-sm text-gray-700">
@@ -390,7 +363,7 @@ const UploadJob: React.FC = () => {
             <button
               type="submit"
               disabled={isUploading || !selectedFile || !user?.profile?.can_print}
-              className="inline-flex items-center justify-center px-8 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isUploading ? (
                 <>

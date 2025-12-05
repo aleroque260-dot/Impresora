@@ -1,8 +1,6 @@
-// src/pages/JobHistory.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
 import {
   FileText,
   CheckCircle,
@@ -15,8 +13,12 @@ import {
   Search,
   Calendar,
   DollarSign,
-  BarChart
+  BarChart,
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
+import { getJobHistory, handleApiError } from '../services/api';
+import { formatTime, formatDate, formatDateShort } from '../utils/formatUtils';
 
 interface JobHistory {
   id: number;
@@ -30,6 +32,7 @@ interface JobHistory {
   completed_at: string | null;
   assigned_printer: string;
   notes: string;
+  user_name: string;
 }
 
 const JobHistory: React.FC = () => {
@@ -40,6 +43,13 @@ const JobHistory: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [selectedJob, setSelectedJob] = useState<JobHistory | null>(null);
+  const [stats, setStats] = useState({
+    total: 0,
+    completed: 0,
+    failed: 0,
+    totalCost: 0,
+    totalHours: 0
+  });
 
   useEffect(() => {
     fetchJobHistory();
@@ -48,67 +58,35 @@ const JobHistory: React.FC = () => {
   const fetchJobHistory = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/print-jobs/history/');
-      const jobsData = Array.isArray(response.data) ? response.data : response.data.results || [];
+      
+      // Obtener historial del backend
+      const response = await getJobHistory();
+      let jobsData: JobHistory[] = [];
+      
+      // Manejar diferentes formatos de respuesta
+      if (Array.isArray(response.data)) {
+        jobsData = response.data;
+      } else if (response.data.results) {
+        jobsData = response.data.results;
+      } else {
+        jobsData = response.data;
+      }
+      
       setJobs(jobsData);
+      
+      // Calcular estadísticas
+      const statsData = {
+        total: jobsData.length,
+        completed: jobsData.filter(j => j.status === 'completed').length,
+        failed: jobsData.filter(j => j.status === 'failed').length,
+        totalCost: jobsData.reduce((sum, job) => sum + (job.cost || 0), 0),
+        totalHours: jobsData.reduce((sum, job) => sum + (job.print_time_actual || 0), 0)
+      };
+      setStats(statsData);
+      
     } catch (err: any) {
       console.error('Error fetching job history:', err);
-      // Datos de ejemplo
-      const mockJobs: JobHistory[] = [
-        {
-          id: 1,
-          job_name: 'Engranaje Motor',
-          status: 'completed',
-          file_name: 'engranaje_motor.stl',
-          print_time_actual: 4.3,
-          filament_used: 45.2,
-          cost: 12.5,
-          created_at: '2025-01-10T09:30:00Z',
-          completed_at: '2025-01-10T13:45:00Z',
-          assigned_printer: 'Prusa i3 MK3S',
-          notes: 'Impresión exitosa, buena calidad'
-        },
-        {
-          id: 2,
-          job_name: 'Prototipo Válvula',
-          status: 'cancelled',
-          file_name: 'prototipo_valvula.stl',
-          print_time_actual: 0,
-          filament_used: 0,
-          cost: 0,
-          created_at: '2025-01-09T14:20:00Z',
-          completed_at: null,
-          assigned_printer: '',
-          notes: 'Cancelado por el usuario'
-        },
-        {
-          id: 3,
-          job_name: 'Soporte Placa',
-          status: 'completed',
-          file_name: 'soporte_placa.stl',
-          print_time_actual: 3.2,
-          filament_used: 22.5,
-          cost: 6.8,
-          created_at: '2025-01-08T11:10:00Z',
-          completed_at: '2025-01-09T09:45:00Z',
-          assigned_printer: 'Ender 3 Pro',
-          notes: 'Requiere lijado leve'
-        },
-        {
-          id: 4,
-          job_name: 'Carcasa Protectora',
-          status: 'failed',
-          file_name: 'carcasa_protectora.stl',
-          print_time_actual: 2.1,
-          filament_used: 15.3,
-          cost: 4.2,
-          created_at: '2025-01-07T16:40:00Z',
-          completed_at: '2025-01-07T18:20:00Z',
-          assigned_printer: 'Creality CR-10',
-          notes: 'Falló a mitad de impresión'
-        }
-      ];
-      setJobs(mockJobs);
+      // No establecemos error para no mostrar alerta, solo log
     } finally {
       setLoading(false);
     }
@@ -151,25 +129,10 @@ const JobHistory: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
-
-  const formatTime = (hours: number) => {
-    if (!hours) return 'N/A';
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}h ${m}m`;
-  };
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mb-4"></div>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4"></div>
         <p className="text-gray-600">Cargando historial...</p>
       </div>
     );
@@ -184,9 +147,16 @@ const JobHistory: React.FC = () => {
           <p className="text-gray-600">Revisa todos tus trabajos anteriores</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={fetchJobHistory}
+            className="flex items-center px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Actualizar
+          </button>
           <Link
             to="/upload"
-            className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Subir Nuevo Trabajo
           </Link>
@@ -194,28 +164,26 @@ const JobHistory: React.FC = () => {
       </div>
 
       {/* Estadísticas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-xl border border-gray-200">
           <p className="text-sm text-gray-500">Total Trabajos</p>
-          <p className="text-2xl font-bold text-gray-900">{jobs.length}</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-gray-200">
           <p className="text-sm text-gray-500">Completados</p>
-          <p className="text-2xl font-bold text-green-600">
-            {jobs.filter(j => j.status === 'completed').length}
-          </p>
+          <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <p className="text-sm text-gray-500">Fallidos</p>
+          <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-gray-200">
           <p className="text-sm text-gray-500">Total Horas</p>
-          <p className="text-2xl font-bold text-blue-600">
-            {jobs.reduce((sum, job) => sum + job.print_time_actual, 0).toFixed(1)}h
-          </p>
+          <p className="text-2xl font-bold text-blue-600">{stats.totalHours.toFixed(1)}h</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-gray-200">
           <p className="text-sm text-gray-500">Total Costo</p>
-          <p className="text-2xl font-bold text-purple-600">
-            ${jobs.reduce((sum, job) => sum + job.cost, 0).toFixed(2)}
-          </p>
+          <p className="text-2xl font-bold text-purple-600">${stats.totalCost.toFixed(2)}</p>
         </div>
       </div>
 
@@ -232,7 +200,7 @@ const JobHistory: React.FC = () => {
               placeholder="Nombre del trabajo o archivo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
@@ -243,7 +211,7 @@ const JobHistory: React.FC = () => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Todos los estados</option>
               <option value="completed">Completados</option>
@@ -259,7 +227,7 @@ const JobHistory: React.FC = () => {
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Todo el tiempo</option>
               <option value="week">Última semana</option>
@@ -283,70 +251,82 @@ const JobHistory: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredJobs.map(job => {
-                const statusInfo = getStatusInfo(job.status);
-                return (
-                  <tr key={job.id} className="hover:bg-gray-50">
-                    <td className="py-4 px-4">
-                      <div>
-                        <div className="font-medium text-gray-900">{job.job_name}</div>
-                        <div className="text-sm text-gray-500">{job.file_name}</div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                        {statusInfo.icon}
-                        <span className="ml-1">{statusInfo.text}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="text-sm">
-                        <div className="text-gray-900">{formatDate(job.created_at)}</div>
-                        {job.completed_at && (
-                          <div className="text-gray-500">Completado: {formatDate(job.completed_at)}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center text-sm">
-                        <Printer className="h-4 w-4 text-gray-400 mr-1" />
-                        {job.assigned_printer || 'N/A'}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center text-sm">
-                        <Clock className="h-4 w-4 text-gray-400 mr-1" />
-                        {formatTime(job.print_time_actual)}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center text-sm">
-                        <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
-                        ${job.cost.toFixed(2)}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedJob(job)}
-                          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-                          title="Ver detalles"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        {job.status === 'completed' && (
+              {filteredJobs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-500">
+                    <div className="flex flex-col items-center">
+                      <FileText className="h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-lg font-medium text-gray-900 mb-2">No hay trabajos en el historial</p>
+                      <p className="text-gray-600 mb-4">Tus trabajos completados aparecerán aquí</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredJobs.map(job => {
+                  const statusInfo = getStatusInfo(job.status);
+                  return (
+                    <tr key={job.id} className="hover:bg-gray-50">
+                      <td className="py-4 px-4">
+                        <div>
+                          <div className="font-medium text-gray-900">{job.job_name}</div>
+                          <div className="text-sm text-gray-500">{formatDateShort(job.created_at)}</div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                          {statusInfo.icon}
+                          <span className="ml-1">{statusInfo.text}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="text-sm">
+                          <div className="text-gray-900">{formatDateShort(job.created_at)}</div>
+                          {job.completed_at && (
+                            <div className="text-gray-500 text-xs">Completado: {formatDateShort(job.completed_at)}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center text-sm">
+                          <Printer className="h-4 w-4 text-gray-400 mr-1" />
+                          {job.assigned_printer || 'N/A'}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center text-sm">
+                          <Clock className="h-4 w-4 text-gray-400 mr-1" />
+                          {formatTime(job.print_time_actual)}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center text-sm">
+                          <DollarSign className="h-4 w-4 text-gray-400 mr-1" />
+                          ${job.cost.toFixed(2)}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
                           <button
-                            className="p-2 text-green-500 hover:text-green-700 hover:bg-green-50 rounded-lg"
-                            title="Descargar información"
+                            onClick={() => setSelectedJob(job)}
+                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                            title="Ver detalles"
                           >
-                            <Download className="h-4 w-4" />
+                            <Eye className="h-4 w-4" />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          {job.status === 'completed' && (
+                            <button
+                              className="p-2 text-green-500 hover:text-green-700 hover:bg-green-50 rounded-lg"
+                              title="Descargar información"
+                            >
+                              <Download className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -384,6 +364,12 @@ const JobHistory: React.FC = () => {
                         <p className="text-sm text-gray-500">Fecha de Creación</p>
                         <p className="font-medium">{formatDate(selectedJob.created_at)}</p>
                       </div>
+                      {selectedJob.completed_at && (
+                        <div>
+                          <p className="text-sm text-gray-500">Fecha de Completado</p>
+                          <p className="font-medium">{formatDate(selectedJob.completed_at)}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -434,7 +420,7 @@ const JobHistory: React.FC = () => {
                     Cerrar
                   </button>
                   {selectedJob.status === 'completed' && (
-                    <button className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                    <button className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                       Descargar Reporte
                     </button>
                   )}

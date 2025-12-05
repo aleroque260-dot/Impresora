@@ -1,4 +1,3 @@
-// src/pages/UserDashboard.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,20 +14,23 @@ import {
   Download,
   RefreshCw,
   Eye,
-  XCircle
+  XCircle,
+  TrendingUp,
+  DollarSign
 } from 'lucide-react';
-import api from '../services/api';
-import PrintJobs from './PrintJobs';
+import { getUserJobs, getStats, handleApiError, formatFileSize } from '../services/api';
+import { formatTime, formatDate, formatDateShort } from '../utils/formatUtils';
 
 interface PrintJob {
   id: number;
   job_name: string;
-  status: 'pending' | 'printing' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'printing' | 'completed' | 'failed' | 'cancelled' | 'reviewing' | 'approved' | 'rejected';
   file_name: string;
   file_size: number;
   print_time_estimate: number;
-  filament_used: number;
-  cost: number;
+  print_time_actual?: number;
+  filament_used?: number;
+  cost?: number;
   created_at: string;
   updated_at: string;
   assigned_printer?: string;
@@ -39,12 +41,28 @@ interface PrintJob {
   };
 }
 
-const UserDashboard: React.FC = () => {
+interface DashboardStats {
+  totalJobs: number;
+  pending: number;
+  printing: number;
+  completed: number;
+  totalCost: number;
+  totalFilament: number;
+  userStats?: {
+    total_user_jobs: number;
+    user_completed: number;
+    user_pending: number;
+    user_total_cost: number;
+    user_total_filament: number;
+  };
+}
+
+const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const [jobs, setJobs] = useState<PrintJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     totalJobs: 0,
     pending: 0,
     printing: 0,
@@ -54,127 +72,72 @@ const UserDashboard: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchUserJobs();
+    fetchDashboardData();
   }, []);
 
-  const fetchUserJobs = async () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get('/print-jobs/my-jobs/');
-      const jobsData = Array.isArray(response.data) ? response.data : response.data.results || [];
+      
+      // Obtener trabajos del usuario
+      const jobsResponse = await getUserJobs();
+      let jobsData: PrintJob[] = [];
+      
+      // Manejar diferentes formatos de respuesta
+      if (Array.isArray(jobsResponse.data)) {
+        jobsData = jobsResponse.data;
+      } else if (jobsResponse.data.results) {
+        jobsData = jobsResponse.data.results;
+      } else {
+        jobsData = jobsResponse.data;
+      }
+      
       setJobs(jobsData);
       
-      // Calcular estadísticas
-      const statsData = {
-        totalJobs: jobsData.length,
-        pending: jobsData.filter((j: PrintJob) => j.status === 'pending').length,
-        printing: jobsData.filter((j: PrintJob)  => j.status === 'printing').length,
-        completed: jobsData.filter((j: PrintJob) => j.status === 'completed').length,
-        totalCost: jobsData.reduce((sum: number, job: PrintJob) => sum + (job.cost || 0), 0),
-        totalFilament: jobsData.reduce((sum: number, job: PrintJob) => sum + (job.filament_used || 0), 0)
-      };
-      setStats(statsData);
-    } catch (err: any) {
-      console.error('Error fetching user jobs:', err);
-      setError('Error al cargar tus trabajos. Usando datos de ejemplo.');
-      
-      // Datos de ejemplo
-      const mockJobs: PrintJob[] = [
-        {
-          id: 1,
-          job_name: 'Engranaje Motor',
-          status: 'printing',
-          file_name: 'engranaje_motor.stl',
-          file_size: 2.4,
-          print_time_estimate: 4.5,
-          filament_used: 45.2,
-          cost: 12.5,
-          created_at: '2025-01-10T09:30:00Z',
-          updated_at: '2025-01-10T10:15:00Z',
-          assigned_printer: 'Prusa i3 MK3S',
-          user: {
-            id: user?.id || 1,
-            username: user?.username || 'usuario',
-            full_name: user?.profile?.full_name || 'Usuario Demo'
-          }
-        },
-        {
-          id: 2,
-          job_name: 'Prototipo Válvula',
-          status: 'pending',
-          file_name: 'prototipo_valvula.stl',
-          file_size: 5.1,
-          print_time_estimate: 8.2,
-          filament_used: 0,
-          cost: 0,
-          created_at: '2025-01-09T14:20:00Z',
-          updated_at: '2025-01-09T14:20:00Z',
-          user: {
-            id: user?.id || 1,
-            username: user?.username || 'usuario',
-            full_name: user?.profile?.full_name || 'Usuario Demo'
-          }
-        },
-        {
-          id: 3,
-          job_name: 'Soporte Placa',
-          status: 'completed',
-          file_name: 'soporte_placa.stl',
-          file_size: 1.8,
-          print_time_estimate: 3.1,
-          filament_used: 22.5,
-          cost: 6.8,
-          created_at: '2025-01-08T11:10:00Z',
-          updated_at: '2025-01-09T09:45:00Z',
-          assigned_printer: 'Ender 3 Pro',
-          user: {
-            id: user?.id || 1,
-            username: user?.username || 'usuario',
-            full_name: user?.profile?.full_name || 'Usuario Demo'
-          }
-        },
-        {
-          id: 4,
-          job_name: 'Carcasa Protectora',
-          status: 'failed',
-          file_name: 'carcasa_protectora.stl',
-          file_size: 3.7,
-          print_time_estimate: 6.5,
-          filament_used: 15.3,
-          cost: 4.2,
-          created_at: '2025-01-07T16:40:00Z',
-          updated_at: '2025-01-07T18:20:00Z',
-          assigned_printer: 'Creality CR-10',
-          user: {
-            id: user?.id || 1,
-            username: user?.username || 'usuario',
-            full_name: user?.profile?.full_name || 'Usuario Demo'
-          }
+      // Obtener estadísticas si el endpoint existe
+      try {
+        const statsResponse = await getStats();
+        if (statsResponse.data.userStats) {
+          setStats(statsResponse.data);
+        } else {
+          // Calcular estadísticas manualmente si no hay endpoint
+          calculateStats(jobsData);
         }
-      ];
+      } catch (statsError) {
+        // Si no hay endpoint de stats, calcular manualmente
+        calculateStats(jobsData);
+      }
       
-      setJobs(mockJobs);
-      const mockStats = {
-        totalJobs: mockJobs.length,
-        pending: mockJobs.filter(j => j.status === 'pending').length,
-        printing: mockJobs.filter(j => j.status === 'printing').length,
-        completed: mockJobs.filter(j => j.status === 'completed').length,
-        totalCost: mockJobs.reduce((sum, job) => sum + (job.cost || 0), 0),
-        totalFilament: mockJobs.reduce((sum, job) => sum + (job.filament_used || 0), 0)
-      };
-      setStats(mockStats);
+    } catch (err: any) {
+      console.error('Error fetching dashboard data:', err);
+      setError(handleApiError(err));
     } finally {
       setLoading(false);
     }
   };
 
+  const calculateStats = (jobsData: PrintJob[]) => {
+    const statsData: DashboardStats = {
+      totalJobs: jobsData.length,
+      pending: jobsData.filter(j => j.status === 'pending' || j.status === 'reviewing').length,
+      printing: jobsData.filter(j => j.status === 'printing').length,
+      completed: jobsData.filter(j => j.status === 'completed').length,
+      totalCost: jobsData.reduce((sum: number, job: PrintJob) => sum + (job.cost || 0), 0),
+      totalFilament: jobsData.reduce((sum: number, job: PrintJob) => sum + (job.filament_used || 0), 0)
+    };
+    setStats(statsData);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'pending':
+      case 'reviewing': return 'bg-yellow-100 text-yellow-800';
       case 'printing': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'failed': return 'bg-red-100 text-red-800';
+      case 'completed':
+      case 'approved': return 'bg-green-100 text-green-800';
+      case 'failed':
+      case 'rejected': return 'bg-red-100 text-red-800';
       case 'cancelled': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -183,29 +146,22 @@ const UserDashboard: React.FC = () => {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'En cola';
+      case 'reviewing': return 'En revisión';
       case 'printing': return 'Imprimiendo';
       case 'completed': return 'Completado';
+      case 'approved': return 'Aprobado';
       case 'failed': return 'Fallido';
+      case 'rejected': return 'Rechazado';
       case 'cancelled': return 'Cancelado';
       default: return status;
     }
-  };
-
-  const formatFileSize = (size: number) => {
-    return size < 1024 ? `${size} KB` : `${(size / 1024).toFixed(1)} MB`;
-  };
-
-  const formatTime = (hours: number) => {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}h ${m}m`;
   };
 
   if (loading && jobs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mb-4"></div>
-        <p className="text-gray-600">Cargando tus trabajos...</p>
+        <p className="text-gray-600">Cargando dashboard...</p>
       </div>
     );
   }
@@ -224,7 +180,7 @@ const UserDashboard: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchUserJobs}
+            onClick={fetchDashboardData}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             <RefreshCw className="h-4 w-4" />
@@ -255,7 +211,7 @@ const UserDashboard: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">En Cola</p>
+              <p className="text-sm text-gray-500">En Cola/Revisión</p>
               <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
             </div>
             <Clock className="h-8 w-8 text-yellow-500" />
@@ -286,7 +242,10 @@ const UserDashboard: React.FC = () => {
       {/* Métricas de Costo */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold text-gray-900 mb-4">Costos Totales</h3>
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+            <DollarSign className="h-5 w-5 mr-2 text-green-600" />
+            Costos Totales
+          </h3>
           <div className="flex items-end">
             <span className="text-3xl font-bold text-gray-900">
               ${stats.totalCost.toFixed(2)}
@@ -297,7 +256,10 @@ const UserDashboard: React.FC = () => {
         </div>
         
         <div className="bg-white p-6 rounded-xl border border-gray-200">
-          <h3 className="font-semibold text-gray-900 mb-4">Filamento Utilizado</h3>
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+            <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />
+            Filamento Utilizado
+          </h3>
           <div className="flex items-end">
             <span className="text-3xl font-bold text-gray-900">
               {stats.totalFilament.toFixed(1)}
@@ -317,21 +279,24 @@ const UserDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Tabla de Trabajos */}
+      {/* Tabla de Trabajos Recientes */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-gray-900">Mis Trabajos de Impresión</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Mis Trabajos Recientes</h2>
             <div className="flex items-center gap-2">
-              <button className="text-sm text-gray-600 hover:text-gray-900">
-                Todos ({stats.totalJobs})
-              </button>
-              <button className="text-sm text-yellow-600 hover:text-yellow-900">
+              <Link
+                to="/pending"
+                className="text-sm text-yellow-600 hover:text-yellow-900"
+              >
                 Pendientes ({stats.pending})
-              </button>
-              <button className="text-sm text-blue-600 hover:text-blue-900">
-                Activos ({stats.printing})
-              </button>
+              </Link>
+              <Link
+                to="/history"
+                className="text-sm text-green-600 hover:text-green-900"
+              >
+                Historial ({stats.completed})
+              </Link>
             </div>
           </div>
         </div>
@@ -367,18 +332,13 @@ const UserDashboard: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                jobs.map(job => (
+                jobs.slice(0, 5).map(job => (
                   <tr key={job.id} className="hover:bg-gray-50">
                     <td className="py-4 px-6">
                       <div>
                         <div className="font-medium text-gray-900">{job.job_name}</div>
                         <div className="text-sm text-gray-500">
-                          {new Date(job.created_at).toLocaleDateString('es-ES', {
-                            day: '2-digit',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {formatDate(job.created_at)}
                         </div>
                       </div>
                     </td>
@@ -414,9 +374,9 @@ const UserDashboard: React.FC = () => {
                     <td className="py-4 px-6">
                       <div className="text-sm">
                         <div className="font-medium text-gray-900">
-                          ${job.cost.toFixed(2)}
+                          ${job.cost ? job.cost.toFixed(2) : '0.00'}
                         </div>
-                        {job.filament_used > 0 && (
+                        {job.filament_used && job.filament_used > 0 && (
                           <div className="text-gray-500">
                             {job.filament_used.toFixed(1)}g
                           </div>
@@ -426,12 +386,13 @@ const UserDashboard: React.FC = () => {
                     
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2">
-                        <button
+                        <Link
+                          to={`/job/${job.id}`}
                           className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
                           title="Ver detalles"
                         >
                           <Eye className="h-4 w-4" />
-                        </button>
+                        </Link>
                         {job.status === 'pending' && (
                           <button
                             className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
@@ -492,8 +453,8 @@ const UserDashboard: React.FC = () => {
                 </span>
               </div>
               <div>
-                <span className="font-medium">Saldo disponible:</span>
-                <span className="ml-2 font-medium text-gray-900">Consultar con administrador</span>
+                <span className="font-medium">Departamento:</span>
+                <span className="ml-2">{user?.profile?.department?.name || 'No asignado'}</span>
               </div>
             </div>
           </div>
@@ -503,4 +464,4 @@ const UserDashboard: React.FC = () => {
   );
 };
 
-export default UserDashboard;
+export default Dashboard;
