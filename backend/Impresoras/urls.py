@@ -1,7 +1,8 @@
-# Impresoras/urls.py - COMPLETO
+# Impresoras/urls.py - VERSIÓN CORREGIDA
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from .views import UserProfileUpdateView
 
 router = DefaultRouter()
 router.register(r'users', views.UserViewSet, basename='user')
@@ -18,13 +19,13 @@ urlpatterns = [
     # Incluye TODAS las rutas del router
     path('', include(router.urls)),
     
-    # Custom endpoints - ¡PERO OJO CON LOS PREFIX!
-    # Estos ya están bajo /api/ porque config/urls.py tiene path('api/', include('Impresoras.urls'))
-    # Así que NO pongas 'api/' aquí de nuevo
+    # Custom endpoints
     path('register/', views.UserRegistrationView.as_view(), name='register'),
     path('dashboard/stats/', views.DashboardStatsView.as_view(), name='dashboard_stats'),
     
-    # ¡¡¡IMPORTANTE!!! Ruta MANUAL para users/me/
-    # Se accederá como /api/users/me/ (porque está bajo /api/)
-    path('users/me/', views.UserViewSet.as_view({'get': 'me'}), name='user-me'),
+    # ¡¡¡COMENTA O ELIMINA ESTA LÍNEA!!! El router ya maneja users/me/
+    # path('users/me/', views.UserViewSet.as_view({'get': 'me'}), name='user-me'),
+    
+    # Endpoint alternativo si lo prefieres
+    path('users/update-profile/', UserProfileUpdateView.as_view(), name='user-update-profile'),
 ]

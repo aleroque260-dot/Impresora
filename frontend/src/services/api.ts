@@ -227,4 +227,5 @@ export const updateJobStatus = (id: number, data: any) =>
 export const getAllPendingJobs = (params?: any) => 
   api.get('/print-jobs/pending/all/', { params });
 
+
 export default api;
