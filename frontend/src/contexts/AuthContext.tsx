@@ -8,7 +8,7 @@ interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
-  updateUser: (userData: Partial<User>) => Promise<void>;
+  updateUser: (userData: Partial<User>) => Promise<User>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   checkAuth: () => Promise<void>;
   isAdmin?: boolean;
@@ -36,6 +36,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAuthenticated: false,
     error: null,
   });
+
+    // Calcular isAdmin basado en el usuario
+  const isAdmin = React.useMemo(() => {
+    return authState.user?.profile?.role === 'ADM' || 
+           authState.user?.is_staff || 
+           false;
+  }, [authState.user]);
 
   // Verificar autenticación al cargar
   useEffect(() => {
@@ -158,10 +165,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
  const updateUser = async (userData: Partial<User>) => {
   if (!authState.user) throw new Error('Usuario no autenticado');
-  
+  console.log('Actualizando usuario con datos:', userData);
   const updatedUser = await authService.updateProfile(authState.user.id, userData);
   setAuthState(prev => ({ ...prev, user: updatedUser }));
   localStorage.setItem('user', JSON.stringify(updatedUser));
+  return updatedUser;
 };
 
   const changePassword = async (oldPassword: string, newPassword: string) => {
