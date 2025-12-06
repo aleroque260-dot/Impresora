@@ -330,45 +330,123 @@ class PrintJobSerializer(serializers.ModelSerializer):
         return print_job
 
 
-class PrintJobCreateSerializer(serializers.ModelSerializer):
-    """Serializer SIMPLIFICADO solo para creación de PrintJob"""
-    file = serializers.FileField(required=True)
-    job_name = serializers.CharField(required=False)
-    material_type = serializers.ChoiceField(choices=MaterialType.choices, default=MaterialType.PLA, required=False)
-    material_weight = serializers.FloatField(min_value=0.1, default=50.0, required=False)
-    print_time_estimate = serializers.IntegerField(min_value=1, default=60, required=False)
+class PrintJobSerializer(serializers.ModelSerializer):
+    """Serializer para PrintJob - AJUSTADO A TU MODELO"""
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    printer_name = serializers.CharField(source='printer.name', read_only=True)
+    job_duration = serializers.FloatField(read_only=True)
+    can_start = serializers.BooleanField(read_only=True)
+    can_cancel = serializers.BooleanField(read_only=True)
+    approved_by_username = serializers.CharField(source='approved_by.username', read_only=True)
+    
+    # Campo file - OBLIGATORIO (para subir el archivo)
+    file = serializers.FileField(write_only=True, required=True)
+    
+    # Campos que SÍ existen en tu modelo (con defaults apropiados)
+    material_type = serializers.ChoiceField(
+        choices=MaterialType.choices,
+        default=MaterialType.PLA,
+        required=False
+    )
+    
+    material_weight = serializers.FloatField(
+        min_value=0.1,
+        default=50.0,
+        required=False
+    )
+    
+    estimated_hours = serializers.FloatField(  # ¡Esto SÍ existe en tu modelo!
+        min_value=0.1,
+        default=2.0,  # 2 horas por defecto, no 60 minutos
+        required=False,
+        help_text="Horas estimadas de impresión"
+    )
+    
+    # Campos opcionales que SÍ existen en tu modelo
+    priority = serializers.IntegerField(default=5, min_value=1, max_value=10, required=False)
+    infill_percentage = serializers.IntegerField(
+        min_value=0, 
+        max_value=100, 
+        required=False,
+        allow_null=True
+    )
+    layer_height = serializers.FloatField(min_value=0.05, required=False, allow_null=True)
+    supports = serializers.BooleanField(default=False, required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = PrintJob
-        fields = ['file', 'job_name', 'material_type', 'material_weight', 
-                 'print_time_estimate', 'notes', 'priority', 'infill_percentage', 'layer_height']
-        extra_kwargs = {
-            'priority': {'required': False, 'default': 1},
-            'infill_percentage': {'required': False, 'default': 20},
-            'layer_height': {'required': False, 'default': 0.2},
-        }
+        fields = '__all__'
+        read_only_fields = [
+            'id', 'job_id', 'user', 'user_username', 'file_name', 'file_size',
+            'status', 'estimated_cost', 'actual_cost', 'actual_hours',
+            'started_at', 'completed_at', 'cancelled_at', 'approved_by',
+            'approved_by_username', 'approved_at', 'paid', 'error_message',
+            'job_duration', 'can_start', 'can_cancel', 'created_at', 'updated_at'
+        ]
+    
+    def validate(self, data):
+        """Validación del archivo"""
+        request = self.context.get('request')
+        
+        # Validar archivo si está presente
+        if 'file' in data:
+            file = data['file']
+            
+            # Validar extensión
+            allowed_extensions = ['.stl', '.obj', '.gcode', '.3mf']
+            file_ext = os.path.splitext(file.name)[1].lower()
+            
+            if file_ext not in allowed_extensions:
+                raise serializers.ValidationError({
+                    "file": f"Extensión no permitida. Use: {', '.join(allowed_extensions)}"
+                })
+            
+            # Validar tamaño (50MB máximo)
+            max_size = 50 * 1024 * 1024
+            if file.size > max_size:
+                raise serializers.ValidationError({
+                    "file": f"Archivo demasiado grande. Máximo: {max_size/(1024*1024)}MB"
+                })
+        
+        return data
     
     def create(self, validated_data):
+        """Crear PrintJob según TU modelo"""
         request = self.context.get('request')
         file = validated_data.pop('file')
         
-        # Crear el print job con datos básicos
-        print_job = PrintJob.objects.create(
-            user=request.user,
-            file=file,
-            file_name=file.name,
-            file_size=file.size,
-            job_name=validated_data.get('job_name', os.path.splitext(file.name)[0]),
-            material_type=validated_data.get('material_type', MaterialType.PLA),
-            material_weight=validated_data.get('material_weight', 50.0),
-            print_time_estimate=validated_data.get('print_time_estimate', 60),
-            notes=validated_data.get('notes', ''),
-            priority=validated_data.get('priority', 1),
-            infill_percentage=validated_data.get('infill_percentage', 20),
-            layer_height=validated_data.get('layer_height', 0.2),
-            status=JobStatus.PENDING
-        )
+        # Asignar usuario automáticamente
+        validated_data['user'] = request.user
+        
+        # Usar file.name como file_name (esto SÍ existe en tu modelo)
+        validated_data['file_name'] = file.name
+        validated_data['file_size'] = file.size
+        
+        # Establecer estado inicial (esto SÍ existe)
+        validated_data['status'] = JobStatus.PENDING
+        
+        # Convertir print_time_estimate a estimated_hours si es necesario
+        # (Tu frontend puede enviar print_time_estimate en minutos, lo convertimos a horas)
+        if 'print_time_estimate' in validated_data:
+            # Si el frontend envía minutos, convertir a horas
+            minutes = validated_data.pop('print_time_estimate')
+            validated_data['estimated_hours'] = minutes / 60.0
+        elif 'estimated_hours' not in validated_data:
+            # Valor por defecto: 2 horas
+            validated_data['estimated_hours'] = 2.0
+        
+        # Si el frontend envía job_name, podemos usarlo como notes
+        if 'job_name' in validated_data:
+            job_name = validated_data.pop('job_name')
+            if 'notes' not in validated_data or not validated_data['notes']:
+                validated_data['notes'] = job_name
+        
+        # Crear el objeto
+        print_job = PrintJob(**validated_data)
+        print_job.file_url = f"/media/print_jobs/{file.name}"  # URL temporal
+        print_job.file = file
+        print_job.save()
         
         return print_job
 

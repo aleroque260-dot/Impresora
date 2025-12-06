@@ -16,8 +16,9 @@ from . import models
 from .models import (
     Department, UserProfile, Printer, UserPrinterAssignment,
     PricingConfig, UserPricingProfile, PrintJob, SystemLog,
-    JobStatus, PrinterStatus, UserRole, MaterialType
+    JobStatus, PrinterStatus, UserRole, MaterialType, PrinterType,
 )
+from .models import LogAction
 from django.core.files.storage import default_storage
 from .serializers import *
 from .serializers import (
@@ -228,7 +229,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.UPDATE,
+            action=LogAction.UPDATE,
             model_name='UserProfile',
             object_id=profile.id,
             description=f"Usuario verificado por {request.user.username}",
@@ -305,7 +306,7 @@ class PrinterViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.UPDATE,
+            action=LogAction.UPDATE,
             model_name='Printer',
             object_id=printer.id,
             description=f"Impresora puesta en mantenimiento por {request.user.username}",
@@ -325,7 +326,7 @@ class PrinterViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.UPDATE,
+            action=LogAction.UPDATE,
             model_name='Printer',
             object_id=printer.id,
             description=f"Mantenimiento completado por {request.user.username}",
@@ -387,7 +388,7 @@ class UserPrinterAssignmentViewSet(viewsets.ModelViewSet):
         assignment = serializer.instance
         SystemLog.objects.create(
             user=self.request.user,
-            action=SystemLog.LogAction.CREATE,
+            action=LogAction.CREATE,
             model_name='UserPrinterAssignment',
             object_id=assignment.id,
             description=f"Asignación creada: {assignment.user.username} - {assignment.printer.name}",
@@ -404,7 +405,7 @@ class UserPrinterAssignmentViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.UPDATE,
+            action=LogAction.UPDATE,
             model_name='UserPrinterAssignment',
             object_id=assignment.id,
             description=f"Asignación desactivada por {request.user.username}",
@@ -623,7 +624,7 @@ class UserPricingProfileViewSet(viewsets.ModelViewSet):
         # Crear log detallado
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.PAYMENT,
+            action=LogAction.PAYMENT,
             model_name='UserPricingProfile',
             object_id=profile.id,
             description=f"Recarga de {amount} CUP realizada por {request.user.username}",
@@ -671,7 +672,7 @@ class UserPricingProfileViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.PAYMENT,
+            action=LogAction.PAYMENT,
             model_name='UserPricingProfile',
             object_id=profile.id,
             description=f"Auto-recarga de {amount} CUP",
@@ -786,7 +787,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=self.request.user,
-            action=SystemLog.LogAction.CREATE,
+            action=LogAction.CREATE,
             model_name='PrintJob',
             object_id=job.id,
             description=f"Trabajo creado: {job.file_name} por {self.request.user.username}",
@@ -812,7 +813,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.UPDATE,
+            action=LogAction.UPDATE,
             model_name='PrintJob',
             object_id=job.id,
             description=f"Trabajo aprobado por {request.user.username}",
@@ -838,7 +839,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
             # Crear log
             SystemLog.objects.create(
                 user=request.user,
-                action=SystemLog.LogAction.PRINT_START,
+                action=LogAction.PRINT_START,
                 model_name='PrintJob',
                 object_id=job.id,
                 description=f"Impresión iniciada por {request.user.username}",
@@ -871,7 +872,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
             # Crear log
             SystemLog.objects.create(
                 user=request.user,
-                action=SystemLog.LogAction.PRINT_END,
+                action=LogAction.PRINT_END,
                 model_name='PrintJob',
                 object_id=job.id,
                 description=f"Impresión completada por {request.user.username}",
@@ -897,7 +898,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.ERROR,
+            action=LogAction.ERROR,
             model_name='PrintJob',
             object_id=job.id,
             description=f"Trabajo fallido: {error_message}",
@@ -924,7 +925,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         # Crear log
         SystemLog.objects.create(
             user=request.user,
-            action=SystemLog.LogAction.UPDATE,
+            action=LogAction.UPDATE,
             model_name='PrintJob',
             object_id=job.id,
             description=f"Trabajo cancelado por {request.user.username}"
@@ -1072,7 +1073,7 @@ class UserRegistrationView(APIView):
             # Crear log
             SystemLog.objects.create(
                 user=user,
-                action=SystemLog.LogAction.CREATE,
+                action=LogAction.CREATE,
                 model_name='User',
                 object_id=user.id,
                 description=f"Usuario registrado: {user.username}",

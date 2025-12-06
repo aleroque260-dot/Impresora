@@ -809,6 +809,16 @@ class PrintJob(models.Model):
         
         self.save()
 
+class LogAction(models.TextChoices):
+    CREATE = 'CRE', 'Creación'
+    UPDATE = 'UPD', 'Actualización'
+    DELETE = 'DEL', 'Eliminación'
+    LOGIN = 'LOG', 'Inicio de Sesión'
+    LOGOUT = 'OUT', 'Cierre de Sesión'
+    PRINT_START = 'PST', 'Inicio de Impresión'
+    PRINT_END = 'PEN', 'Fin de Impresión'
+    PAYMENT = 'PAY', 'Pago'
+    ERROR = 'ERR', 'Error'
 
 class SystemLog(models.Model):
     """Logs de auditoría del sistema"""
