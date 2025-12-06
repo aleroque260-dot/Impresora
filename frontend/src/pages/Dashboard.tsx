@@ -10,7 +10,6 @@ import {
   AlertCircle, 
   User,
   Bell,
-  BarChart,
   Download,
   RefreshCw,
   Eye,
@@ -18,8 +17,8 @@ import {
   TrendingUp,
   DollarSign
 } from 'lucide-react';
-import { getUserJobs, getStats, handleApiError, formatFileSize } from '../services/api';
-import { formatTime, formatDate, formatDateShort } from '../utils/formatUtils';
+import { getUserJobs, getStats, handleApiError, formatFileSize, getQuickBalanceInfo } from '../services/api';
+import { formatTime, formatDate } from '../utils/formatUtils';
 
 interface PrintJob {
   id: number;
@@ -58,9 +57,9 @@ interface DashboardStats {
 }
 
 const Dashboard: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [jobs, setJobs] = useState<PrintJob[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [stats, setStats] = useState<DashboardStats>({
     totalJobs: 0,
@@ -69,6 +68,14 @@ const Dashboard: React.FC = () => {
     completed: 0,
     totalCost: 0,
     totalFilament: 0
+  });
+ const [balanceInfo, setBalanceInfo] = useState<any>({
+    balance: 1500,
+    available_credit: 1000,
+    has_negative_balance: false,
+    active_jobs: 0,
+    can_print: true,  // ⭐⭐ true SIEMPRE ⭐⭐
+    currency_symbol: 'CUP',
   });
 
   useEffect(() => {
@@ -80,11 +87,9 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError('');
       
-      // Obtener trabajos del usuario
       const jobsResponse = await getUserJobs();
       let jobsData: PrintJob[] = [];
       
-      // Manejar diferentes formatos de respuesta
       if (Array.isArray(jobsResponse.data)) {
         jobsData = jobsResponse.data;
       } else if (jobsResponse.data.results) {
@@ -95,17 +100,29 @@ const Dashboard: React.FC = () => {
       
       setJobs(jobsData);
       
-      // Obtener estadísticas si el endpoint existe
+      try {
+        const balanceResponse = await getQuickBalanceInfo();
+        setBalanceInfo(balanceResponse.data);
+      } catch (balanceErr) {
+        console.log('No se pudo obtener información de saldo:', balanceErr);
+        setBalanceInfo({
+          balance: 0,
+          available_credit: 1000,
+          has_negative_balance: false,
+          active_jobs: 0,
+          can_print: true,
+          currency_symbol: 'CUP',
+        });
+      }
+      
       try {
         const statsResponse = await getStats();
         if (statsResponse.data.userStats) {
           setStats(statsResponse.data);
         } else {
-          // Calcular estadísticas manualmente si no hay endpoint
           calculateStats(jobsData);
         }
       } catch (statsError) {
-        // Si no hay endpoint de stats, calcular manualmente
         calculateStats(jobsData);
       }
       
@@ -127,6 +144,15 @@ const Dashboard: React.FC = () => {
       totalFilament: jobsData.reduce((sum: number, job: PrintJob) => sum + (job.filament_used || 0), 0)
     };
     setStats(statsData);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-CU', {
+      style: 'currency',
+      currency: 'CUP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
 
   const getStatusColor = (status: string) => {
@@ -168,15 +194,24 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header con saldo */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            ¡Bienvenido, {user?.profile?.full_name || user?.username}!
+            ¡Bienvenido, {user?.first_name || 'Usuario'}!
           </h1>
-          <p className="text-gray-600">
-            {user?.profile?.department?.name || 'Usuario'} • {user?.profile?.student_id || 'Sin ID de estudiante'}
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-gray-600">
+              {user?.profile?.department?.name || 'Usuario'} • {user?.profile?.student_id || 'Sin ID de estudiante'}
+            </p>
+            <span className="hidden md:inline text-gray-400">•</span>
+            <div className="hidden md:flex items-center bg-blue-50 px-3 py-1 rounded-lg border border-blue-100">
+              <DollarSign className="h-3 w-3 text-blue-600 mr-1" />
+              <span className="text-sm font-medium text-blue-700">
+                Saldo: {balanceInfo ? formatCurrency(balanceInfo.balance) : '0 CUP'}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -196,9 +231,45 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* SALDO DESTACADO - Descomenta cuando crees el componente */}
+      {/* <ProminentBalance /> */}
+
+      {/* Banner de saldo temporal */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold mb-2">Tu Saldo Disponible</h2>
+            <div className="flex items-baseline">
+              <span className="text-4xl font-bold">
+                {balanceInfo ? formatCurrency(balanceInfo.balance) : '0 CUP'}
+              </span>
+              <span className="ml-2 text-xl opacity-90">CUP</span>
+            </div>
+            <p className="text-blue-100 mt-2 text-sm">
+              Para impresiones 3D y servicios del laboratorio
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => window.location.href = '/recharge'}
+              className="px-4 py-2 bg-white text-blue-700 font-medium rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <DollarSign className="h-4 w-4 inline mr-2" />
+              Recargar
+            </button>
+            <button
+              onClick={() => window.location.href = '/balance-history'}
+              className="px-4 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-400 transition-colors"
+            >
+              Ver Historial
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Estadísticas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Total Trabajos</p>
@@ -208,7 +279,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
         
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">En Cola/Revisión</p>
@@ -218,7 +289,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
         
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Imprimiendo</p>
@@ -228,7 +299,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
         
-        <div className="bg-white p-4 rounded-xl border border-gray-200">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Completados</p>

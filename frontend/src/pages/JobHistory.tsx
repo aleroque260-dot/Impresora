@@ -17,7 +17,7 @@ import {
   ArrowLeft,
   RefreshCw
 } from 'lucide-react';
-import { getJobHistory, handleApiError } from '../services/api';
+import { getJobHistory, getUserJobs, handleApiError } from '../services/api';
 import { formatTime, formatDate, formatDateShort } from '../utils/formatUtils';
 
 interface JobHistory {
@@ -50,6 +50,7 @@ const JobHistory: React.FC = () => {
     totalCost: 0,
     totalHours: 0
   });
+  
 
   useEffect(() => {
     fetchJobHistory();

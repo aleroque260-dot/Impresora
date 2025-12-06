@@ -6,12 +6,21 @@ from django.contrib.auth.models import User
 from django.db.models import Q, Count, Sum, Avg
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.core.files.storage import default_storage
+import os
+import uuid
+from django.conf import settings
 from . import models
 from .models import (
     Department, UserProfile, Printer, UserPrinterAssignment,
-    PricingConfig, UserPricingProfile, PrintJob, SystemLog
+    PricingConfig, UserPricingProfile, PrintJob, SystemLog,
+    JobStatus, PrinterStatus, UserRole, MaterialType
 )
 from .serializers import *
+from .serializers import (
+    UserSerializer, UserCreateSerializer, UserUpdateSerializer, CurrentUserSerializer,
+    DepartmentSerializer, UserProfileSerializer, SimpleUserProfileSerializer
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,7 +61,7 @@ class IsAdminOrTechnician(permissions.BasePermission):
         
         try:
             profile = request.user.profile
-            return profile.role in [UserProfile.UserRole.TECHNICIAN, UserProfile.UserRole.ADMIN]
+            return profile.role in [UserRole.TECHNICIAN, UserRole.ADMIN]
         except UserProfile.DoesNotExist:
             return False
 
@@ -60,8 +69,6 @@ class IsAdminOrTechnician(permissions.BasePermission):
 # ====================
 # VIEWSETS
 # ====================
-
-# EN EL ARCHIVO views.py, REEMPLAZA SOLO EL UserViewSet:
 
 class UserViewSet(viewsets.ModelViewSet):
     """ViewSet para manejar usuarios"""
@@ -86,81 +93,11 @@ class UserViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]  # Cualquiera puede registrarse
         return super().get_permissions()
     
-    @action(detail=False, methods=['get', 'patch', 'put'])
+    @action(detail=False, methods=['get'])
     def me(self, request):
-        """Obtiene o actualiza información del usuario actual - VERSIÓN CORREGIDA"""
-        user = request.user
-        
-        if request.method == 'GET':
-            serializer = self.get_serializer(user)
-            return Response(serializer.data)
-        
-        elif request.method in ['PATCH', 'PUT']:
-            # 1. Preparar datos del usuario (nivel superior)
-            user_data = {}
-            if 'first_name' in request.data:
-                user_data['first_name'] = request.data['first_name']
-            if 'last_name' in request.data:
-                user_data['last_name'] = request.data['last_name']
-            if 'email' in request.data:
-                user_data['email'] = request.data['email']
-            
-            # 2. Preparar datos del perfil
-            profile_data = {}
-            profile_fields_to_update = ['phone', 'address', 'student_id']
-            for field in profile_fields_to_update:
-                if field in request.data:
-                    profile_data[field] = request.data[field]
-            
-            errors = {}
-            
-            # 3. Actualizar datos del usuario (si hay)
-            if user_data:
-                user_serializer = UserUpdateSerializer(user, data=user_data, partial=True)
-                if user_serializer.is_valid():
-                    user_serializer.save()
-                else:
-                    errors.update(user_serializer.errors)
-            
-            # 4. Actualizar perfil (si hay datos y el perfil existe)
-            if profile_data:
-                try:
-                    # Obtener el perfil existente
-                    profile = user.profile
-                    
-                    # ¡IMPORTANTE! Preservar datos existentes que no queremos cambiar
-                    # No sobrescribir role, is_verified, department, etc.
-                    profile_serializer = SimpleUserProfileSerializer(
-                        profile, 
-                        data=profile_data, 
-                        partial=True
-                    )
-                    
-                    if profile_serializer.is_valid():
-                        # Guardar solo los campos que vienen en profile_data
-                        # No tocamos role, is_verified, department, etc.
-                        for field, value in profile_data.items():
-                            setattr(profile, field, value)
-                        profile.save()
-                    else:
-                        errors.update(profile_serializer.errors)
-                        
-                except UserProfile.DoesNotExist:
-                    # Si no existe perfil, ¡NO CREARLO AQUÍ!
-                    # Dejar que se maneje por signals o administración manual
-                    # Para evitar crear perfiles con valores por defecto que sobrescriban
-                    # Campos importantes como role, is_verified, etc.
-                    pass
-            
-            # 5. Si hay errores, devolverlos
-            if errors:
-                return Response(errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 6. Devolver usuario actualizado
-            # Recargar usuario de la base de datos para obtener todos los datos actualizados
-            updated_user = User.objects.get(id=user.id)
-            response_serializer = CurrentUserSerializer(updated_user)
-            return Response(response_serializer.data)
+        """Obtiene información del usuario actual"""
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def set_password(self, request, pk=None):
@@ -183,7 +120,8 @@ class UserViewSet(viewsets.ModelViewSet):
             user.save()
             return Response({"detail": "Contraseña cambiada correctamente"})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    # En views.py, agrega esta clase:
+
+
 class UserProfileUpdateView(APIView):
     """Vista específica para actualizar perfil de usuario"""
     permission_classes = [permissions.IsAuthenticated]
@@ -225,6 +163,8 @@ class UserProfileUpdateView(APIView):
             return Response(response_serializer.data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 class DepartmentViewSet(viewsets.ModelViewSet):
     """ViewSet para manejar departamentos"""
     queryset = Department.objects.all().order_by('name')
@@ -356,7 +296,7 @@ class PrinterViewSet(viewsets.ModelViewSet):
     def start_maintenance(self, request, pk=None):
         """Pone la impresora en mantenimiento"""
         printer = self.get_object()
-        printer.status = Printer.PrinterStatus.MAINTENANCE
+        printer.status = PrinterStatus.MAINTENANCE
         printer.save()
         
         # Crear log
@@ -375,7 +315,7 @@ class PrinterViewSet(viewsets.ModelViewSet):
     def complete_maintenance(self, request, pk=None):
         """Completa el mantenimiento de la impresora"""
         printer = self.get_object()
-        printer.status = Printer.PrinterStatus.AVAILABLE
+        printer.status = PrinterStatus.AVAILABLE
         printer.total_print_hours = 0  # Reiniciar contador
         printer.save()
         
@@ -536,10 +476,173 @@ class UserPricingProfileViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """Obtiene el perfil de precios del usuario actual"""
+        try:
+            profile = UserPricingProfile.objects.get(user=request.user)
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data)
+        except UserPricingProfile.DoesNotExist:
+            # Crear perfil automáticamente si no existe
+            try:
+                profile = UserPricingProfile.objects.create(user=request.user)
+                serializer = self.get_serializer(profile)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response(
+                    {"detail": f"Error creando perfil de precios: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+    
+    @action(detail=False, methods=['get'])
+    def my_balance(self, request):
+        """Obtiene solo el saldo del usuario actual (endpoint rápido)"""
+        try:
+            profile = UserPricingProfile.objects.get(user=request.user)
+            response_data = {
+                'balance': float(profile.balance),
+                'credit_limit': float(profile.credit_limit),
+                'available_credit': float(profile.available_credit),
+                'total_spent': float(profile.total_spent),
+                'last_payment_date': profile.last_payment_date,
+            }
+            
+            # Agregar información de configuración de precios si existe
+            if profile.pricing_config:
+                response_data['pricing_config'] = {
+                    'name': profile.pricing_config.name,
+                    'cost_per_hour': float(profile.pricing_config.cost_per_hour),
+                    'cost_per_gram': float(profile.pricing_config.cost_per_gram),
+                    'student_discount': float(profile.pricing_config.student_discount),
+                    'teacher_discount': float(profile.pricing_config.teacher_discount),
+                }
+            
+            # Calcular estadísticas rápidas de impresión
+            print_jobs = PrintJob.objects.filter(user=request.user, status='COM')
+            if print_jobs.exists():
+                response_data['print_stats'] = {
+                    'completed_jobs': print_jobs.count(),
+                    'total_hours': sum(job.actual_hours or 0 for job in print_jobs),
+                    'total_material': sum(job.material_weight or 0 for job in print_jobs),
+                    'total_spent_printing': sum(float(job.actual_cost or 0) for job in print_jobs),
+                }
+            
+            return Response(response_data)
+        except UserPricingProfile.DoesNotExist:
+            # Crear perfil automáticamente si no existe
+            profile = UserPricingProfile.objects.create(user=request.user)
+            return Response({
+                'balance': 0.0,
+                'credit_limit': float(profile.credit_limit),
+                'available_credit': float(profile.credit_limit),
+                'total_spent': 0.0,
+                'print_stats': {
+                    'completed_jobs': 0,
+                    'total_hours': 0,
+                    'total_material': 0,
+                    'total_spent_printing': 0,
+                }
+            })
+    
+    @action(detail=False, methods=['get'])
+    def quick_info(self, request):
+        """Información rápida para mostrar en el dashboard"""
+        try:
+            profile = UserPricingProfile.objects.get(user=request.user)
+            
+            # Trabajos activos del usuario
+            active_jobs = PrintJob.objects.filter(
+                user=request.user,
+                status__in=['APP', 'PRI', 'PAU']
+            ).count()
+            
+            return Response({
+                'balance': float(profile.balance),
+                'available_credit': float(profile.available_credit),
+                'has_negative_balance': profile.balance < 0,
+                'active_jobs': active_jobs,
+                'can_print': profile.balance < profile.credit_limit and active_jobs < 3,
+                'currency_symbol': 'CUP',
+            })
+        except UserPricingProfile.DoesNotExist:
+            return Response({
+                'balance': 0.0,
+                'available_credit': 1000.0,
+                'has_negative_balance': False,
+                'active_jobs': 0,
+                'can_print': True,
+                'currency_symbol': 'CUP',
+            })
+    
     @action(detail=True, methods=['post'])
     def add_balance(self, request, pk=None):
         """Agrega saldo al perfil de precios"""
         profile = self.get_object()
+        
+        # Verificar permisos
+        if not (request.user.is_staff or request.user == profile.user):
+            return Response(
+                {"detail": "No tienes permiso para modificar este saldo"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        amount = request.data.get('amount')
+        if not amount:
+            return Response(
+                {"amount": ["Este campo es requerido"]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            amount = float(amount)
+            if amount <= 0:
+                raise ValueError("El monto debe ser positivo")
+        except (ValueError, TypeError):
+            return Response(
+                {"amount": ["Debe ser un número positivo"]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Límite máximo de recarga
+        max_recharge = 10000  # 10,000 CUP máximo por recarga
+        if amount > max_recharge:
+            return Response(
+                {"amount": [f"El monto máximo por recarga es {max_recharge} CUP"]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Agregar saldo
+        old_balance = float(profile.balance)
+        profile.add_balance(amount)
+        new_balance = float(profile.balance)
+        
+        # Crear log detallado
+        SystemLog.objects.create(
+            user=request.user,
+            action=SystemLog.LogAction.PAYMENT,
+            model_name='UserPricingProfile',
+            object_id=profile.id,
+            description=f"Recarga de {amount} CUP realizada por {request.user.username}",
+            before_data={'balance': old_balance},
+            after_data={'balance': new_balance},
+            ip_address=self.get_client_ip(request)
+        )
+        
+        return Response({
+            "detail": f"Saldo agregado: {amount} CUP",
+            "new_balance": new_balance,
+            "old_balance": old_balance,
+            "added_amount": amount,
+        })
+    
+    @action(detail=False, methods=['post'])
+    def recharge_my_account(self, request):
+        """Recarga la cuenta del usuario actual"""
+        try:
+            profile = UserPricingProfile.objects.get(user=request.user)
+        except UserPricingProfile.DoesNotExist:
+            profile = UserPricingProfile.objects.create(user=request.user)
         
         amount = request.data.get('amount')
         if not amount:
@@ -558,7 +661,9 @@ class UserPricingProfileViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        old_balance = float(profile.balance)
         profile.add_balance(amount)
+        new_balance = float(profile.balance)
         
         # Crear log
         SystemLog.objects.create(
@@ -566,13 +671,16 @@ class UserPricingProfileViewSet(viewsets.ModelViewSet):
             action=SystemLog.LogAction.PAYMENT,
             model_name='UserPricingProfile',
             object_id=profile.id,
-            description=f"Saldo agregado: {amount} CUP por {request.user.username}",
+            description=f"Auto-recarga de {amount} CUP",
+            before_data={'balance': old_balance},
+            after_data={'balance': new_balance},
             ip_address=self.get_client_ip(request)
         )
         
         return Response({
-            "detail": f"Saldo agregado: {amount} CUP",
-            "new_balance": profile.balance
+            "detail": f"Recarga exitosa de {amount} CUP",
+            "new_balance": new_balance,
+            "old_balance": old_balance,
         })
     
     def get_client_ip(self, request):
@@ -585,24 +693,18 @@ class UserPricingProfileViewSet(viewsets.ModelViewSet):
         return ip
 
 
+# ====================
+# PRINTJOB VIEWSET - VERSIÓN DEFINITIVA CORREGIDA
+# ====================
+
 class PrintJobViewSet(viewsets.ModelViewSet):
-    """ViewSet para manejar trabajos de impresión"""
+    """ViewSet para manejar trabajos de impresión - VERSIÓN DEFINITIVA"""
     queryset = PrintJob.objects.all().select_related('user', 'printer', 'approved_by')
     serializer_class = PrintJobSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['file_name', 'user__username', 'job_id']
     ordering_fields = ['created_at', 'priority', 'estimated_hours', 'status']
-    
-    def get_serializer_class(self):
-        if self.action in ['update_status', 'partial_update']:
-            return PrintJobStatusUpdateSerializer
-        return PrintJobSerializer
-    
-    def get_permissions(self):
-        if self.action in ['approve', 'start_printing', 'complete', 'fail']:
-            return [permissions.IsAuthenticated(), IsAdminOrTechnician()]
-        return super().get_permissions()
     
     def get_queryset(self):
         """Filtra trabajos según permisos"""
@@ -644,28 +746,41 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         
         return queryset
     
-    def perform_create(self, serializer):
-        """Guarda el trabajo con el usuario actual"""
-        serializer.save(user=self.request.user)
+    @action(detail=False, methods=['get'])
+    def my_jobs(self, request):
+        """Obtiene los trabajos del usuario actual"""
+        queryset = self.get_queryset().filter(user=request.user)
         
-        # Calcular costo estimado
-        try:
-            print_job = serializer.instance
-            profile = print_job.user.profile
-            pricing_profile = print_job.user.pricing_profile
-            print_job.estimated_cost = pricing_profile.calculate_cost(
-                hours=print_job.estimated_hours,
-                material_weight=print_job.material_weight,
-                material_type=print_job.material_type,
-                user_role=profile.role
-            )
-            print_job.save()
-        except Exception as e:
-            # Si hay error en cálculo, continuar sin costo estimado
-            logger.error(f"Error calculando costo estimado: {e}")
+        # Paginación
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def pending(self, request):
+        """Obtiene trabajos pendientes del usuario actual"""
+        queryset = self.get_queryset().filter(
+            user=request.user,
+            status__in=[JobStatus.PENDING, JobStatus.APPROVED]
+        )
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def get_permissions(self):
+        if self.action in ['approve', 'start_printing', 'complete', 'fail']:
+            return [permissions.IsAuthenticated(), IsAdminOrTechnician()]
+        return super().get_permissions()
+    
+    def perform_create(self, serializer):
+        """Guarda el trabajo con el usuario actual - ya manejado por el serializer"""
+        # El serializer ya maneja la asignación del usuario
+        job = serializer.save()
         
         # Crear log
-        job = serializer.instance
         SystemLog.objects.create(
             user=self.request.user,
             action=SystemLog.LogAction.CREATE,
@@ -680,13 +795,13 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         """Aprueba un trabajo de impresión"""
         job = self.get_object()
         
-        if job.status != PrintJob.JobStatus.PENDING:
+        if job.status != JobStatus.PENDING:
             return Response(
                 {"detail": "Solo se pueden aprobar trabajos pendientes"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        job.status = PrintJob.JobStatus.APPROVED
+        job.status = JobStatus.APPROVED
         job.approved_by = request.user
         job.approved_at = timezone.now()
         job.save()
@@ -787,6 +902,32 @@ class PrintJobViewSet(viewsets.ModelViewSet):
         )
         
         return Response({"detail": "Trabajo marcado como fallido"})
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Cancela un trabajo pendiente"""
+        job = self.get_object()
+        
+        if not job.can_cancel:
+            return Response(
+                {"detail": "No se puede cancelar este trabajo."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        job.status = JobStatus.CANCELLED
+        job.cancelled_at = timezone.now()
+        job.save()
+        
+        # Crear log
+        SystemLog.objects.create(
+            user=request.user,
+            action=SystemLog.LogAction.UPDATE,
+            model_name='PrintJob',
+            object_id=job.id,
+            description=f"Trabajo cancelado por {request.user.username}"
+        )
+        
+        return Response({"detail": "Trabajo cancelado correctamente."})
     
     def get_client_ip(self, request):
         """Obtiene la IP del cliente"""
@@ -918,7 +1059,7 @@ class UserRegistrationView(APIView):
             # Crear perfil de usuario por defecto
             UserProfile.objects.create(
                 user=user,
-                role=UserProfile.UserRole.STUDENT,
+                role=UserRole.STUDENT,
                 is_verified=False  # Necesita verificación por admin
             )
             
@@ -950,19 +1091,3 @@ class UserRegistrationView(APIView):
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
-
-
-# ====================
-# SERIALIZER ADICIONAL
-# ====================
-
-class PasswordChangeSerializer(serializers.Serializer):
-    """Serializer para cambio de contraseña"""
-    old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
-    new_password2 = serializers.CharField(required=True)
-    
-    def validate(self, data):
-        if data['new_password'] != data['new_password2']:
-            raise serializers.ValidationError({"new_password": "Las contraseñas no coinciden"})
-        return data

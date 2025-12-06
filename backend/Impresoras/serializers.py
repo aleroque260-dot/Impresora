@@ -17,12 +17,12 @@ class SimpleUserProfileSerializer(serializers.ModelSerializer):
     """Serializer SIMPLE para UserProfile (sin recursión) - VERSIÓN SEGURA"""
     department_name = serializers.CharField(source='department.name', read_only=True)
     role_display = serializers.CharField(source='get_role_display', read_only=True)
-    
+    can_print = serializers.BooleanField(read_only=True)
     class Meta:
         model = UserProfile
         fields = ['id', 'role', 'role_display', 'department', 'department_name', 
-                 'student_id', 'phone', 'address', 'is_verified', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'role', 'department', 'is_verified', 'created_at', 'updated_at']
+                 'student_id', 'phone', 'address', 'is_verified', 'can_print', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'role', 'department', 'is_verified', 'can_print', 'created_at', 'updated_at']
         # ¡IMPORTANTE! Campos protegidos contra modificación
 
 
@@ -75,15 +75,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     department_name = serializers.CharField(source='department.name', read_only=True)
     role_display = serializers.CharField(source='get_role_display', read_only=True)
-    
+    can_print = serializers.BooleanField(read_only=True)
     class Meta:
         model = UserProfile
         fields = ['id', 'user_id', 'username', 'email', 'first_name', 'last_name', 
                  'full_name', 'role', 'role_display', 'department', 'department_name',
-                 'student_id', 'phone', 'address', 'is_verified', 'max_concurrent_jobs',
+                 'student_id', 'phone', 'address', 'is_verified','can_print', 'max_concurrent_jobs',
                  'created_at', 'updated_at']
         read_only_fields = ['id', 'user_id', 'username', 'email', 'first_name', 'last_name',
-                           'full_name', 'role', 'department', 'is_verified', 
+                           'full_name', 'role', 'department', 'is_verified', 'can_print',
                            'max_concurrent_jobs', 'created_at', 'updated_at']
     
     def validate(self, data):
@@ -249,6 +249,27 @@ class PrintJobSerializer(serializers.ModelSerializer):
     can_start = serializers.BooleanField(read_only=True)
     can_cancel = serializers.BooleanField(read_only=True)
     approved_by_username = serializers.CharField(source='approved_by.username', read_only=True)
+    file = serializers.FileField(write_only=True, required=True)
+    
+      # Campos con valores por defecto inteligentes
+    material_type = serializers.ChoiceField(
+        choices=MaterialType.choices,
+        default=MaterialType.PLA
+    )
+    
+    material_weight = serializers.FloatField(
+        required=False,
+        min_value=0.1,
+        default=50.0  # Peso promedio por defecto
+    )
+    
+    estimated_hours = serializers.FloatField(
+        required=False,
+        min_value=0.1,
+        default=2.0  # Tiempo promedio por defecto
+    )
+    
+    supports = serializers.BooleanField(default=False)
     
     class Meta:
         model = PrintJob
