@@ -1,6 +1,8 @@
+import os
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
+from django.core.files.storage import default_storage
 from .models import (
     Department, UserProfile, Printer, UserPrinterAssignment,
     PricingConfig, UserPricingProfile, PrintJob, SystemLog,
@@ -241,61 +243,137 @@ class UserPricingProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'total_spent', 'last_payment_date']
 
 
+# ... (tu código anterior se mantiene igual)
+
+import os  # Asegúrate de tener esta importación
+
 class PrintJobSerializer(serializers.ModelSerializer):
-    """Serializer para PrintJob"""
+    """Serializer para PrintJob - VERSIÓN FUNCIONAL"""
     user_username = serializers.CharField(source='user.username', read_only=True)
     printer_name = serializers.CharField(source='printer.name', read_only=True)
     job_duration = serializers.FloatField(read_only=True)
     can_start = serializers.BooleanField(read_only=True)
     can_cancel = serializers.BooleanField(read_only=True)
     approved_by_username = serializers.CharField(source='approved_by.username', read_only=True)
+    
+    # Campo file - OBLIGATORIO
     file = serializers.FileField(write_only=True, required=True)
     
-      # Campos con valores por defecto inteligentes
+    # Campos con valores por defecto (NO required=True)
+    print_time_estimate = serializers.IntegerField(
+        required=False,  # No requerido - el frontend puede omitirlo
+        min_value=1,
+        default=60,  # Valor por defecto si no se envía
+        help_text="Tiempo estimado en minutos (default: 60)"
+    )
+    
     material_type = serializers.ChoiceField(
         choices=MaterialType.choices,
-        default=MaterialType.PLA
+        required=False,  # No requerido
+        default=MaterialType.PLA,  # Valor por defecto
     )
     
     material_weight = serializers.FloatField(
-        required=False,
+        required=False,  # No requerido
         min_value=0.1,
-        default=50.0  # Peso promedio por defecto
+        default=50.0,  # Valor por defecto
+        help_text="Peso estimado en gramos (default: 50)"
     )
     
-    estimated_hours = serializers.FloatField(
+    job_name = serializers.CharField(
         required=False,
-        min_value=0.1,
-        default=2.0  # Tiempo promedio por defecto
+        allow_blank=True
     )
     
-    supports = serializers.BooleanField(default=False)
+    # Campos opcionales con defaults
+    priority = serializers.IntegerField(default=1, min_value=1, max_value=5, required=False)
+    infill_percentage = serializers.IntegerField(default=20, min_value=0, max_value=100, required=False)
+    layer_height = serializers.FloatField(default=0.2, min_value=0.05, max_value=0.4, required=False)
+    supports = serializers.BooleanField(default=False, required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = PrintJob
         fields = '__all__'
-        read_only_fields = ['job_id', 'created_at', 'updated_at', 'actual_cost']
+        read_only_fields = [
+            'id', 'user', 'user_username', 'file_name', 'file_size',
+            'status', 'cost', 'estimated_cost', 'actual_cost', 'filament_used',
+            'actual_hours', 'started_at', 'completed_at', 'approved_by',
+            'approved_by_username', 'approved_at', 'error_message',
+            'job_duration', 'can_start', 'can_cancel', 'created_at', 'updated_at'
+        ]
     
     def create(self, validated_data):
-        """Calcula costo estimado al crear el trabajo"""
-        print_job = super().create(validated_data)
+        """Crear PrintJob con campos automáticos"""
+        request = self.context.get('request')
+        file = validated_data.pop('file')
         
-        # Calcular costo estimado
-        try:
-            profile = print_job.user.profile
-            pricing_profile = print_job.user.pricing_profile
-            print_job.estimated_cost = pricing_profile.calculate_cost(
-                hours=print_job.estimated_hours,
-                material_weight=print_job.material_weight,
-                material_type=print_job.material_type,
-                user_role=profile.role
-            )
-            print_job.save()
-        except Exception as e:
-            # Si hay error en cálculo, continuar sin costo estimado
-            pass
+        # Asignar usuario automáticamente
+        validated_data['user'] = request.user
+        
+        # Extraer nombre y tamaño del archivo
+        validated_data['file_name'] = file.name
+        validated_data['file_size'] = file.size
+        
+        # Si no se proporcionó job_name, usar el nombre del archivo
+        if 'job_name' not in validated_data or not validated_data['job_name']:
+            validated_data['job_name'] = os.path.splitext(file.name)[0]
+        
+        # Establecer estado inicial
+        validated_data['status'] = JobStatus.PENDING
+        
+        # Crear el objeto
+        print_job = PrintJob(**validated_data)
+        print_job.file = file
+        print_job.save()
         
         return print_job
+
+
+class PrintJobCreateSerializer(serializers.ModelSerializer):
+    """Serializer SIMPLIFICADO solo para creación de PrintJob"""
+    file = serializers.FileField(required=True)
+    job_name = serializers.CharField(required=False)
+    material_type = serializers.ChoiceField(choices=MaterialType.choices, default=MaterialType.PLA, required=False)
+    material_weight = serializers.FloatField(min_value=0.1, default=50.0, required=False)
+    print_time_estimate = serializers.IntegerField(min_value=1, default=60, required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    
+    class Meta:
+        model = PrintJob
+        fields = ['file', 'job_name', 'material_type', 'material_weight', 
+                 'print_time_estimate', 'notes', 'priority', 'infill_percentage', 'layer_height']
+        extra_kwargs = {
+            'priority': {'required': False, 'default': 1},
+            'infill_percentage': {'required': False, 'default': 20},
+            'layer_height': {'required': False, 'default': 0.2},
+        }
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        file = validated_data.pop('file')
+        
+        # Crear el print job con datos básicos
+        print_job = PrintJob.objects.create(
+            user=request.user,
+            file=file,
+            file_name=file.name,
+            file_size=file.size,
+            job_name=validated_data.get('job_name', os.path.splitext(file.name)[0]),
+            material_type=validated_data.get('material_type', MaterialType.PLA),
+            material_weight=validated_data.get('material_weight', 50.0),
+            print_time_estimate=validated_data.get('print_time_estimate', 60),
+            notes=validated_data.get('notes', ''),
+            priority=validated_data.get('priority', 1),
+            infill_percentage=validated_data.get('infill_percentage', 20),
+            layer_height=validated_data.get('layer_height', 0.2),
+            status=JobStatus.PENDING
+        )
+        
+        return print_job
+
+
+# ... (el resto de tu código se mantiene igual)
 
 
 class PrintJobStatusUpdateSerializer(serializers.Serializer):

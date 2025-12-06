@@ -1,3 +1,4 @@
+import os
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -6,6 +7,7 @@ from django.contrib.auth.models import User
 from django.db.models import Q, Count, Sum, Avg
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.core.files.storage import default_storage
 import os
 import uuid
@@ -16,6 +18,7 @@ from .models import (
     PricingConfig, UserPricingProfile, PrintJob, SystemLog,
     JobStatus, PrinterStatus, UserRole, MaterialType
 )
+from django.core.files.storage import default_storage
 from .serializers import *
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer, CurrentUserSerializer,
@@ -705,7 +708,7 @@ class PrintJobViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['file_name', 'user__username', 'job_id']
     ordering_fields = ['created_at', 'priority', 'estimated_hours', 'status']
-    
+    parser_classes = [MultiPartParser, FormParser]
     def get_queryset(self):
         """Filtra trabajos según permisos"""
         queryset = super().get_queryset()

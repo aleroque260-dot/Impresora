@@ -518,7 +518,7 @@ const UploadJob: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="layer_height" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="layer_height" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
                 <Layers className="h-4 w-4 mr-1" />
                 Altura de Capa (mm)
               </label>
