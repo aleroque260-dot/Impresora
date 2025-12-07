@@ -1,23 +1,26 @@
 // src/components/RoleBasedDashboard.tsx
 import React from 'react';
-import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import Dashboard from '../pages/Dashboard';
+import UserDashboard from '../pages/dashboard/UserDashboard';
+import AdminDashboard from '../pages/admin/AdminDashboard';
+
 
 const RoleBasedDashboard: React.FC = () => {
   const { user } = useAuth();
   
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  console.log('🔍 RoleBasedDashboard:', {
+    username: user?.username,
+    role: user?.profile?.role,
+    is_staff: user?.is_staff,
+    decision: user?.profile?.role === 'ADM' ? 'Admin' : 'User'
+  });
+  
+  // SOLO usar el rol del profile, ignorar is_staff
+  if (user?.profile?.role === 'ADM') {
+    return <AdminDashboard />;
   }
   
-  // Redirigir admins al panel admin
-  if (user.profile?.role === 'ADM') {
-    return <Navigate to="/admin" replace />;
-  }
-  
-  // Técnicos y otros usuarios van al dashboard normal
-  return <Dashboard />;
+  // Todos los demás van al UserDashboard
+  return <UserDashboard />;
 };
-
 export default RoleBasedDashboard;

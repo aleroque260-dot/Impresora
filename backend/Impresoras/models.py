@@ -40,7 +40,10 @@ class PrinterType(models.TextChoices):
 
 class JobStatus(models.TextChoices):
     PENDING = 'PEN', 'Pendiente'
+    UNDER_REVIEW = 'URV', 'En Revisión'
     APPROVED = 'APP', 'Aprobado'
+    REJECTED = 'REJ', 'Rechazado'
+    ASSIGNED = 'ASS', 'Asignado a Impresora'
     PRINTING = 'PRI', 'Imprimiendo'
     PAUSED = 'PAU', 'Pausado'
     COMPLETED = 'COM', 'Completado'
@@ -56,19 +59,6 @@ class MaterialType(models.TextChoices):
     RESIN = 'RES', 'Resina'
     NYLON = 'NYL', 'Nylon'
     OTHER = 'OTH', 'Otro'
-
-
-class LogAction(models.TextChoices):
-    CREATE = 'CRE', 'Creación'
-    UPDATE = 'UPD', 'Actualización'
-    DELETE = 'DEL', 'Eliminación'
-    LOGIN = 'LOG', 'Inicio de Sesión'
-    LOGOUT = 'OUT', 'Cierre de Sesión'
-    PRINT_START = 'PST', 'Inicio de Impresión'
-    PRINT_END = 'PEN', 'Fin de Impresión'
-    PAYMENT = 'PAY', 'Pago'
-    ERROR = 'ERR', 'Error'
-
 
 # ====================
 # MODEL DEFINITIONS
@@ -674,12 +664,29 @@ class PrintJob(models.Model):
         verbose_name="Aprobado por"
     )
     approved_at = models.DateTimeField(null=True, blank=True, verbose_name="Aprobado en")
-    
+     
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_jobs',
+        verbose_name="Revisado por"
+    )
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Revisado en"
+    )
+    assignment_reason = models.TextField(
+        blank=True,
+        verbose_name="Razón de Asignación"
+    )
     # Tiempos
     started_at = models.DateTimeField(null=True, blank=True, verbose_name="Iniciado en")
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name="Completado en")
     cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name="Cancelado en")
-    
+    assigned_at = models.DateTimeField( null=True, blank=True, verbose_name="Asignado en")  
     # Costos
     estimated_cost = models.DecimalField(
         max_digits=10,
@@ -723,16 +730,32 @@ class PrintJob(models.Model):
     def can_start(self):
         """Verifica si el trabajo puede iniciar"""
         return (
-            self.status == JobStatus.APPROVED and
+            self.status in [JobStatus.APPROVED, JobStatus.ASSIGNED] and
             self.printer and
             self.printer.can_print
         )
+    @property
+    def can_assign(self):
+     """Verifica si el trabajo puede ser asignado a una impresora"""
+     return self.status == JobStatus.APPROVED and not self.printer   
     
     @property
     def can_cancel(self):
         """Verifica si el trabajo puede cancelarse"""
-        return self.status in [JobStatus.PENDING, JobStatus.APPROVED, JobStatus.PRINTING]
+        return self.status in [JobStatus.PENDING,JobStatus.UNDER_REVIEW, JobStatus.APPROVED,JobStatus.ASSIGNED, JobStatus.PRINTING]
     
+    @property
+    def can_review(self):
+       """Verifica si el trabajo puede ser revisado"""
+       return self.status == JobStatus.PENDING
+
+    @property
+    def is_rejected(self):
+      return self.status == JobStatus.REJECTED
+
+    @property
+    def is_assigned(self):
+       return self.status == JobStatus.ASSIGNED
     @property
     def is_completed(self):
         return self.status == JobStatus.COMPLETED
@@ -740,7 +763,22 @@ class PrintJob(models.Model):
     @property
     def is_failed(self):
         return self.status == JobStatus.FAILED
+    def send_to_review(self):
+     """Envía el trabajo a revisión"""
+     if self.status != JobStatus.PENDING:
+        raise ValueError("Solo trabajos pendientes pueden enviarse a revisión")
+     self.status = JobStatus.UNDER_REVIEW
+     self.save()
+     return self
+
+    def reject_job(self, rejection_reason):
+     """Rechaza un trabajo"""
+     if self.status not in [JobStatus.PENDING, JobStatus.UNDER_REVIEW]:
+        raise ValueError("Solo trabajos pendientes o en revisión pueden ser rechazados")
     
+     self.status = JobStatus.REJECTED
+     self.error_message = rejection_reason
+     self.save()
     def calculate_estimated_cost(self):
         """Calcula el costo estimado"""
         try:

@@ -1,15 +1,15 @@
+// Tu App.tsx quedaría así:
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import Layout from './components/Layout';
+import Layout from './components/Layout/Layout';
 
 // Importar componentes admin
 import AdminLayout from './components/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminPrinters from './pages/admin/AdminPrinters';
-import AdminPrintJobs from './pages/admin/AdminPrintJobs';
 import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 
@@ -18,9 +18,9 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 
-// Páginas para usuarios - CAMBIA EL ALIAS DE Profile
-import Dashboard from './pages/Dashboard';
-import UserProfile from './pages/Profile';   // ← CAMBIADO: UserProfile en vez de Profile
+// Páginas para usuarios
+import UserDashboard from './pages/dashboard/UserDashboard';  // ← Dashboard NUEVO (modular) 🆕
+import UserProfile from './pages/Profile';
 import UploadJob from './pages/UploadJob';
 import JobHistory from './pages/JobHistory';
 import PendingJobs from './pages/PendingJobs';
@@ -52,10 +52,12 @@ function App() {
               {/* Dashboard inteligente que redirige según rol */}
               <Route path="/dashboard" element={<RoleBasedDashboard />} />
               
+              {/* También puedes agregar una ruta directa para probar el nuevo dashboard */}
+              <Route path="/new-dashboard" element={<UserDashboard />} /> {/* ← PARA PRUEBAS */}
               
               <Route path="/print-jobs" element={<PrintJobs />} />
               <Route path="/upload" element={<UploadJob />} />
-              <Route path="/profile" element={<UserProfile />} />  {/* ← CAMBIADO AQUÍ */}
+              <Route path="/profile" element={<UserProfile />} />
               <Route path="/job-history" element={<JobHistory />} />
               <Route path="/pending-jobs" element={<PendingJobs />} />
               <Route path="/help" element={<Help />} />
@@ -79,7 +81,6 @@ function App() {
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="printers" element={<AdminPrinters />} />
-              <Route path="print-jobs" element={<AdminPrintJobs />} />
               <Route path="reports" element={<AdminReports />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
