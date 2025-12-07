@@ -18,20 +18,18 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 
-// Páginas para usuarios
+// Páginas para usuarios - CAMBIA EL ALIAS DE Profile
 import Dashboard from './pages/Dashboard';
 import PrintersList from './pages/PrintersList';
-import Profile from './pages/Profile';   
+import UserProfile from './pages/Profile';   // ← CAMBIADO: UserProfile en vez de Profile
 import UploadJob from './pages/UploadJob';
 import JobHistory from './pages/JobHistory';
 import PendingJobs from './pages/PendingJobs';
 import Help from './pages/Help';
 import Contact from './pages/Contact';
 
-// User Management Pages
-import UserList from './pages/users/UserList';
-import UserCreateEdit from './pages/users/UserCreateEdit';
-import UserDetail from './pages/users/UserDetail';
+// Componente para redirección de dashboard
+import RoleBasedDashboard from './components/RoleBasedDashboard';
 
 // Componentes de ejemplo
 const PrintJobs = () => <div className="p-6">Trabajos de Impresión</div>;
@@ -52,11 +50,13 @@ function App() {
           {/* Rutas protegidas con layout de usuario normal */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout><Outlet /></Layout>}>
-              <Route path="/dashboard" element={<Dashboard />} />
+              {/* Dashboard inteligente que redirige según rol */}
+              <Route path="/dashboard" element={<RoleBasedDashboard />} />
+              
               <Route path="/printers" element={<PrintersList />} />
               <Route path="/print-jobs" element={<PrintJobs />} />
               <Route path="/upload" element={<UploadJob />} />
-              <Route path="/profile" element={<Profile />} />
+              <Route path="/profile" element={<UserProfile />} />  {/* ← CAMBIADO AQUÍ */}
               <Route path="/job-history" element={<JobHistory />} />
               <Route path="/pending-jobs" element={<PendingJobs />} />
               <Route path="/help" element={<Help />} />
@@ -64,10 +64,6 @@ function App() {
               
               {/* Rutas solo para administradores y técnicos */}
               <Route element={<ProtectedRoute requiredRoles={['ADM', 'TEC']} />}>
-                <Route path="/users" element={<UserList />} />
-                <Route path="/users/create" element={<UserCreateEdit />} />
-                <Route path="/users/edit/:id" element={<UserCreateEdit />} />
-                <Route path="/users/:id" element={<UserDetail />} />
                 <Route path="/reports" element={<Reports />} />
               </Route>
 
