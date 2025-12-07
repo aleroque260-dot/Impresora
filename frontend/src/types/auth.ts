@@ -42,6 +42,7 @@ export interface UserProfile {
   is_verified: boolean;
   max_concurrent_jobs: number;
   full_name: string;
+  balance: number;
   email: string;
   is_active_user: boolean;
   can_print: boolean;

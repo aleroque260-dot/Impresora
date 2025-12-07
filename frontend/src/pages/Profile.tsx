@@ -1,31 +1,60 @@
-// frontend/src/pages/Profile.tsx (VERSIÓN 100% FUNCIONAL)
-import React, { useState } from 'react';
+// src/pages/Profile.tsx (SOLO VISUALIZACIÓN, SIN EDITAR)
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   User, Mail, Phone, MapPin, Shield, CheckCircle, XCircle, 
-  Save, Edit3, X, Briefcase, Hash, Calendar, Clock, DollarSign
+  Briefcase, Hash, Calendar, Clock, DollarSign, Printer,
+  FileText, CreditCard, Users, Activity
 } from 'lucide-react';
 import { ROLE_LABELS, ROLE_COLORS } from '../types/auth';
-import { updateUserProfile } from '../services/api';
+import api from '../services/api';
+
+interface UserStats {
+  total_jobs: number;
+  total_pages: number;
+  total_spent: number;
+  active_jobs: number;
+  completed_jobs: number;
+  pending_jobs: number;
+}
 
 const Profile: React.FC = () => {
-  const { user, updateUser } = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  
-  // Datos del formulario - estructura CORRECTA para el backend
-  const [formData, setFormData] = useState({
-    first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
-    email: user?.email || '',
-    profile: {
-      phone: user?.profile?.phone || '',
-      address: user?.profile?.address || '',
-      student_id: user?.profile?.student_id || '',
-    }
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<UserStats>({
+    total_jobs: 0,
+    total_pages: 0,
+    total_spent: 0,
+    active_jobs: 0,
+    completed_jobs: 0,
+    pending_jobs: 0,
   });
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (user) {
+      fetchUserStats();
+    }
+  }, [user]);
+
+  const fetchUserStats = async () => {
+    try {
+      setLoading(true);
+      // Aquí puedes agregar llamadas API para obtener estadísticas
+      // Por ahora usamos datos mock
+      setStats({
+        total_jobs: 15,
+        total_pages: 245,
+        total_spent: 89.25,
+        active_jobs: 2,
+        completed_jobs: 12,
+        pending_jobs: 1,
+      });
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!user) {
     return (
@@ -38,550 +67,349 @@ const Profile: React.FC = () => {
     );
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    
-    // Manejar campos anidados (profile.phone, profile.address, etc.)
-    if (name.startsWith('profile.')) {
-      const profileField = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        profile: {
-          ...prev.profile,
-          [profileField]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
-    
-    // Limpiar error del campo
-    if (errors[name]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
-    }
-  };
-
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.first_name.trim()) {
-      newErrors.first_name = 'El nombre es requerido';
-    }
-    
-    if (!formData.last_name.trim()) {
-      newErrors.last_name = 'El apellido es requerido';
-    }
-    
-    if (!formData.email.trim()) {
-      newErrors.email = 'El email es requerido';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email inválido';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    console.log('🔄 Iniciando actualización de perfil...');
-    
-    if (!validateForm()) {
-      console.log('❌ Validación falló');
-      return;
-    }
-    
-    setLoading(true);
-    
-    try {
-      // Preparar datos en la estructura EXACTA que espera el backend
-      // Según tu serializer, el backend espera:
-      // - first_name, last_name, email en el nivel superior
-      // - profile: { phone, address, student_id }
-      
-      const updateData = {
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email,
-        profile: {
-          phone: formData.profile.phone,
-          address: formData.profile.address,
-          student_id: formData.profile.student_id,
-        }
-      };
-      
-      console.log('📤 Enviando datos al backend:', updateData);
-      
-      // Llamar a la API con los datos correctamente estructurados
-      const response = await updateUserProfile(updateData);
-      console.log('✅ Respuesta del backend:', response.data);
-      
-      // Actualizar en el contexto de autenticación
-      // IMPORTANTE: El backend devuelve el usuario completo
-      await updateUser(response.data);
-      
-      // Salir del modo edición
-      setIsEditing(false);
-      
-      // Mostrar mensaje de éxito
-      alert('✅ Perfil actualizado exitosamente');
-      console.log('🎉 Perfil actualizado correctamente');
-      
-    } catch (error: any) {
-      console.error('❌ Error completo:', error);
-      
-      if (error.response?.data) {
-        console.error('📄 Datos del error:', error.response.data);
-        
-        // Manejar errores del backend
-        const backendErrors = error.response.data;
-        const mappedErrors: Record<string, string> = {};
-        
-        if (typeof backendErrors === 'object') {
-          Object.keys(backendErrors).forEach(key => {
-            if (Array.isArray(backendErrors[key])) {
-              mappedErrors[key] = backendErrors[key][0];
-            } else if (typeof backendErrors[key] === 'string') {
-              mappedErrors[key] = backendErrors[key];
-            } else if (backendErrors[key] && typeof backendErrors[key] === 'object') {
-              // Manejar errores anidados (profile.phone, etc.)
-              Object.keys(backendErrors[key]).forEach(nestedKey => {
-                mappedErrors[`profile.${nestedKey}`] = backendErrors[key][nestedKey];
-              });
-            }
-          });
-        }
-        
-        if (Object.keys(mappedErrors).length > 0) {
-          setErrors(mappedErrors);
-          alert('❌ Hay errores en el formulario. Revísalos.');
-        } else {
-          alert(`❌ Error: ${JSON.stringify(backendErrors)}`);
-        }
-      } else if (error.request) {
-        alert('❌ Error de conexión. Verifica tu internet.');
-      } else {
-        alert('❌ Error inesperado. Intenta nuevamente.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancel = () => {
-    // Restaurar datos originales
-    setFormData({
-      first_name: user.first_name || '',
-      last_name: user.last_name || '',
-      email: user.email || '',
-      profile: {
-        phone: user.profile?.phone || '',
-        address: user.profile?.address || '',
-        student_id: user.profile?.student_id || '',
-      }
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
-    setErrors({});
-    setIsEditing(false);
-  };
-
-  // Renderizar formulario o vista según modo
-  const renderPersonalInfo = () => {
-    if (isEditing) {
-      return (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre *
-              </label>
-              <input
-                type="text"
-                name="first_name"
-                value={formData.first_name}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.first_name ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Tu nombre"
-              />
-              {errors.first_name && (
-                <p className="mt-1 text-sm text-red-600">{errors.first_name}</p>
-              )}
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Apellido *
-              </label>
-              <input
-                type="text"
-                name="last_name"
-                value={formData.last_name}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.last_name ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Tu apellido"
-              />
-              {errors.last_name && (
-                <p className="mt-1 text-sm text-red-600">{errors.last_name}</p>
-              )}
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email *
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                errors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="tu@email.com"
-            />
-            {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Teléfono
-            </label>
-            <input
-              type="tel"
-              name="profile.phone"
-              value={formData.profile.phone}
-              onChange={handleInputChange}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                errors['profile.phone'] ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Ej: +53 12345678"
-            />
-            {errors['profile.phone'] && (
-              <p className="mt-1 text-sm text-red-600">{errors['profile.phone']}</p>
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Dirección
-            </label>
-            <textarea
-              name="profile.address"
-              value={formData.profile.address}
-              onChange={handleInputChange}
-              rows={2}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                errors['profile.address'] ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Tu dirección completa"
-            />
-            {errors['profile.address'] && (
-              <p className="mt-1 text-sm text-red-600">{errors['profile.address']}</p>
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Carné de Estudiante
-            </label>
-            <input
-              type="text"
-              name="profile.student_id"
-              value={formData.profile.student_id}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: 03110256748"
-            />
-          </div>
-        </div>
-      );
-    }
-
-    // Modo visualización
-    return (
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Nombre Completo</label>
-          <p className="text-gray-900 font-medium">
-            {user.first_name} {user.last_name}
-          </p>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
-          <div className="flex items-center">
-            <Mail className="h-4 w-4 text-gray-400 mr-2" />
-            <p className="text-gray-900">{user.email}</p>
-          </div>
-        </div>
-        
-        {user.profile?.phone && (
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono</label>
-            <div className="flex items-center">
-              <Phone className="h-4 w-4 text-gray-400 mr-2" />
-              <p className="text-gray-900">{user.profile.phone}</p>
-            </div>
-          </div>
-        )}
-        
-        {user.profile?.address && (
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">Dirección</label>
-            <div className="flex items-start">
-              <MapPin className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
-              <p className="text-gray-900">{user.profile.address}</p>
-            </div>
-          </div>
-        )}
-        
-        {user.profile?.student_id && (
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">Carné de Estudiante</label>
-            <div className="flex items-center">
-              <Hash className="h-4 w-4 text-gray-400 mr-2" />
-              <p className="text-gray-900">{user.profile.student_id}</p>
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-        {/* Header del perfil */}
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-8 text-white">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center">
-                <User className="h-10 w-10" />
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Header del perfil */}
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-8 text-white mb-8">
+        <div className="flex flex-col md:flex-row md:items-center gap-6">
+          <div className="flex items-center justify-center md:justify-start">
+            <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center">
+              <span className="text-3xl font-bold">
+                {user.first_name?.[0]}{user.last_name?.[0]}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex-1 text-center md:text-left">
+            <h1 className="text-3xl font-bold mb-2">
+              {user.first_name} {user.last_name}
+            </h1>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-3">
+              <div className="flex items-center">
+                <Mail className="h-4 w-4 mr-2 opacity-80" />
+                <span className="opacity-90">{user.email}</span>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold">
-                  {user.first_name} {user.last_name}
-                </h1>
-                <p className="opacity-90">{user.email}</p>
-                <div className="flex items-center space-x-2 mt-2">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    ROLE_COLORS[user.profile?.role as keyof typeof ROLE_COLORS] || 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {ROLE_LABELS[user.profile?.role as keyof typeof ROLE_LABELS] || 'Usuario'}
-                  </span>
-                  {user.profile?.is_verified ? (
-                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Verificado
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium flex items-center">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Pendiente de verificación
-                    </span>
-                  )}
-                </div>
+              <span className="opacity-50">•</span>
+              <div className="flex items-center">
+                <Briefcase className="h-4 w-4 mr-2 opacity-80" />
+                <span className="opacity-90">
+                  {ROLE_LABELS[user.profile?.role as keyof typeof ROLE_LABELS] || 'Usuario'}
+                </span>
               </div>
             </div>
             
-            <div className="flex gap-2 mt-4 md:mt-0">
-              {isEditing ? (
-                <>
-                  <button
-                    onClick={handleCancel}
-                    className="flex items-center gap-2 px-4 py-2 bg-white/20 text-white font-medium rounded-lg hover:bg-white/30 transition-colors"
-                    disabled={loading}
-                  >
-                    <X className="h-4 w-4" />
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        Guardar Cambios
-                      </>
-                    )}
-                  </button>
-                </>
+            <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+              <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                ROLE_COLORS[user.profile?.role as keyof typeof ROLE_COLORS] || 'bg-white/20'
+              }`}>
+                {ROLE_LABELS[user.profile?.role as keyof typeof ROLE_LABELS] || 'Usuario'}
+              </span>
+              
+              {user.profile?.is_verified ? (
+                <span className="px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Verificado
+                </span>
               ) : (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Edit3 className="h-4 w-4" />
-                  Editar Perfil
-                </button>
+                <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium flex items-center">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Pendiente
+                </span>
+              )}
+              
+              {user.is_active ? (
+                <span className="px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                  Cuenta Activa
+                </span>
+              ) : (
+                <span className="px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                  Cuenta Inactiva
+                </span>
               )}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Contenido del perfil */}
-        <div className="p-8">
-          {isEditing && (
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-700">
-                <strong>Nota:</strong> Los campos marcados con * son obligatorios.
-                Los cambios se guardarán automáticamente.
-              </p>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Información personal */}
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <User className="h-5 w-5 mr-2" />
-                  Información Personal
-                </h2>
-                {renderPersonalInfo()}
-              </div>
-
-              {/* Información del sistema (solo lectura) */}
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <Briefcase className="h-5 w-5 mr-2" />
-                  Información del Sistema
-                </h2>
-                <div className="space-y-4">
+      {/* Contenido principal */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Columna izquierda - Información personal */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div className="p-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                <User className="h-5 w-5 mr-2 text-blue-600" />
+                Información Personal
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Información básica */}
+                <div className="space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Departamento</label>
-                    {user.profile?.department ? (
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Nombre Completo
+                    </label>
+                    <p className="text-gray-900 font-medium text-lg">
+                      {user.first_name} {user.last_name}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      Correo Electrónico
+                    </label>
+                    <div className="flex items-center">
+                      <Mail className="h-4 w-4 text-gray-400 mr-2" />
+                      <p className="text-gray-900">{user.email}</p>
+                    </div>
+                  </div>
+                  
+                  {user.profile?.student_id && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500 mb-1">
+                        Carné de Estudiante
+                      </label>
+                      <div className="flex items-center">
+                        <Hash className="h-4 w-4 text-gray-400 mr-2" />
+                        <p className="text-gray-900 font-medium">{user.profile.student_id}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Información de contacto */}
+                <div className="space-y-5">
+                  {user.profile?.phone && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500 mb-1">
+                        Teléfono
+                      </label>
+                      <div className="flex items-center">
+                        <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                        <p className="text-gray-900">{user.profile.phone}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {user.profile?.address && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500 mb-1">
+                        Dirección
+                      </label>
+                      <div className="flex items-start">
+                        <MapPin className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                        <p className="text-gray-900">{user.profile.address}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {user.profile?.department && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500 mb-1">
+                        Departamento
+                      </label>
                       <div className="flex items-center">
                         <Shield className="h-4 w-4 text-gray-400 mr-2" />
                         <p className="text-gray-900">{user.profile.department.name}</p>
                       </div>
-                    ) : (
-                      <p className="text-gray-500 italic">No asignado</p>
-                    )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Estadísticas del usuario */}
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden mt-8">
+            <div className="p-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                <Activity className="h-5 w-5 mr-2 text-blue-600" />
+                Estadísticas de Impresión
+              </h2>
+              
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="bg-blue-50 p-5 rounded-xl">
+                  <div className="flex items-center mb-3">
+                    <Printer className="h-5 w-5 text-blue-600 mr-2" />
+                    <p className="text-sm font-medium text-blue-800">Trabajos Totales</p>
                   </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Estado de la Cuenta</label>
-                    <div className="flex items-center space-x-2">
+                  <p className="text-3xl font-bold text-blue-900">{stats.total_jobs}</p>
+                  <p className="text-xs text-blue-600 mt-1">Todos los trabajos enviados</p>
+                </div>
+                
+                <div className="bg-green-50 p-5 rounded-xl">
+                  <div className="flex items-center mb-3">
+                    <FileText className="h-5 w-5 text-green-600 mr-2" />
+                    <p className="text-sm font-medium text-green-800">Páginas Impresas</p>
+                  </div>
+                  <p className="text-3xl font-bold text-green-900">{stats.total_pages}</p>
+                  <p className="text-xs text-green-600 mt-1">Total de páginas</p>
+                </div>
+                
+                <div className="bg-purple-50 p-5 rounded-xl">
+                  <div className="flex items-center mb-3">
+                    <DollarSign className="h-5 w-5 text-purple-600 mr-2" />
+                    <p className="text-sm font-medium text-purple-800">Gasto Total</p>
+                  </div>
+                  <p className="text-3xl font-bold text-purple-900">${stats.total_spent.toFixed(2)}</p>
+                  <p className="text-xs text-purple-600 mt-1">En impresiones</p>
+                </div>
+                
+                <div className="bg-yellow-50 p-5 rounded-xl">
+                  <div className="flex items-center mb-3">
+                    <Clock className="h-5 w-5 text-yellow-600 mr-2" />
+                    <p className="text-sm font-medium text-yellow-800">Pendientes</p>
+                  </div>
+                  <p className="text-3xl font-bold text-yellow-900">{stats.pending_jobs}</p>
+                  <p className="text-xs text-yellow-600 mt-1">Esperando aprobación</p>
+                </div>
+                
+                <div className="bg-orange-50 p-5 rounded-xl">
+                  <div className="flex items-center mb-3">
+                    <Activity className="h-5 w-5 text-orange-600 mr-2" />
+                    <p className="text-sm font-medium text-orange-800">Activos</p>
+                  </div>
+                  <p className="text-3xl font-bold text-orange-900">{stats.active_jobs}</p>
+                  <p className="text-xs text-orange-600 mt-1">En impresión</p>
+                </div>
+                
+                <div className="bg-teal-50 p-5 rounded-xl">
+                  <div className="flex items-center mb-3">
+                    <CheckCircle className="h-5 w-5 text-teal-600 mr-2" />
+                    <p className="text-sm font-medium text-teal-800">Completados</p>
+                  </div>
+                  <p className="text-3xl font-bold text-teal-900">{stats.completed_jobs}</p>
+                  <p className="text-xs text-teal-600 mt-1">Impresiones finalizadas</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Columna derecha - Información del sistema */}
+        <div>
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden sticky top-8">
+            <div className="p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                <Briefcase className="h-5 w-5 mr-2 text-gray-600" />
+                Información del Sistema
+              </h2>
+              
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Estado de la Cuenta
+                  </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center">
                       {user.is_active ? (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                        <span className="px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
+                          <CheckCircle className="h-3 w-3 inline mr-1" />
                           Activa
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
+                        <span className="px-3 py-1.5 bg-red-100 text-red-800 rounded-lg text-sm font-medium">
+                          <XCircle className="h-3 w-3 inline mr-1" />
                           Inactiva
                         </span>
                       )}
-                      
+                    </div>
+                    
+                    <div className="flex items-center">
                       {user.profile?.can_print ? (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                        <span className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
+                          <Printer className="h-3 w-3 inline mr-1" />
                           Puede imprimir
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">
+                        <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-lg text-sm font-medium">
+                          <XCircle className="h-3 w-3 inline mr-1" />
                           No puede imprimir
                         </span>
                       )}
                     </div>
                   </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Trabajos Concurrentes</label>
-                    <p className="text-gray-900">
-                      Máximo: <span className="font-semibold">{user.profile?.max_concurrent_jobs || 1}</span>
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Miembro desde</label>
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                      <p className="text-gray-900">
-                        {new Date(user.date_joined).toLocaleDateString('es-ES', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                    Límites del Sistema
+                  </label>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Trabajos Concurrentes</p>
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 text-gray-400 mr-2" />
+                        <p className="text-gray-900 font-medium">
+                          {user.profile?.max_concurrent_jobs || 1} máximo
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Saldo Disponible</p>
+                      <div className="flex items-center">
+                        <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
+                        <p className="text-2xl font-bold text-green-600">
+                          ${user.profile?.balance?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Último acceso</label>
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                      <p className="text-gray-900">
-                        {user.last_login ? (
-                          new Date(user.last_login).toLocaleDateString('es-ES', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })
-                        ) : (
-                          'Nunca'
-                        )}
+                </div>
+                
+                <div className="pt-4 border-t border-gray-200">
+                  <label className="block text-sm font-medium text-gray-500 mb-3">
+                    Historial de Cuenta
+                  </label>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center mb-1">
+                        <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                        <p className="text-sm font-medium text-gray-700">Miembro desde</p>
+                      </div>
+                      <p className="text-gray-900 pl-6">
+                        {formatDate(user.date_joined)}
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <div className="flex items-center mb-1">
+                        <Clock className="h-4 w-4 text-gray-400 mr-2" />
+                        <p className="text-sm font-medium text-gray-700">Último acceso</p>
+                      </div>
+                      <p className="text-gray-900 pl-6">
+                        {user.last_login ? formatDate(user.last_login) : 'Nunca'}
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </form>
+          </div>
 
-          {/* Estadísticas rápidas */}
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Estadísticas Rápidas</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Briefcase className="h-4 w-4 text-gray-400 mr-2" />
-                  <p className="text-sm text-gray-500">Trabajos Totales</p>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">0</p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                  <p className="text-sm text-gray-500">Horas Impresas</p>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">0</p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <DollarSign className="h-4 w-4 text-gray-400 mr-2" />
-                  <p className="text-sm text-gray-500">Gasto Total</p>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">0 CUP</p>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex items-center mb-2">
-                  <User className="h-4 w-4 text-gray-400 mr-2" />
-                  <p className="text-sm text-gray-500">Trabajos Activos</p>
-                </div>
-                <p className="text-2xl font-bold text-gray-900">0</p>
+          {/* Nota importante */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 mt-8">
+            <div className="flex items-start">
+              <Shield className="h-5 w-5 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-medium text-yellow-800 mb-2">Información Importante</h3>
+                <ul className="text-sm text-yellow-700 space-y-1">
+                  <li>• Para actualizar tu información, contacta al administrador</li>
+                  <li>• El saldo solo puede ser recargado por el administrador</li>
+                  <li>• Los límites de impresión son establecidos por el sistema</li>
+                  <li>• Contacta con soporte para cualquier modificación</li>
+                </ul>
               </div>
             </div>
           </div>

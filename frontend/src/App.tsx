@@ -20,7 +20,6 @@ import NotFound from './pages/NotFound';
 
 // Páginas para usuarios - CAMBIA EL ALIAS DE Profile
 import Dashboard from './pages/Dashboard';
-import PrintersList from './pages/PrintersList';
 import UserProfile from './pages/Profile';   // ← CAMBIADO: UserProfile en vez de Profile
 import UploadJob from './pages/UploadJob';
 import JobHistory from './pages/JobHistory';
@@ -53,7 +52,7 @@ function App() {
               {/* Dashboard inteligente que redirige según rol */}
               <Route path="/dashboard" element={<RoleBasedDashboard />} />
               
-              <Route path="/printers" element={<PrintersList />} />
+              
               <Route path="/print-jobs" element={<PrintJobs />} />
               <Route path="/upload" element={<UploadJob />} />
               <Route path="/profile" element={<UserProfile />} />  {/* ← CAMBIADO AQUÍ */}
