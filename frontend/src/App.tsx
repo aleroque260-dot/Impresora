@@ -4,7 +4,16 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
-// Páginas publicas
+// Importar componentes admin
+import AdminLayout from './components/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminPrinters from './pages/admin/AdminPrinters';
+import AdminPrintJobs from './pages/admin/AdminPrintJobs';
+import AdminReports from './pages/admin/AdminReports';
+import AdminSettings from './pages/admin/AdminSettings';
+
+// Páginas públicas
 import Home from './pages/Home';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
@@ -19,12 +28,10 @@ import PendingJobs from './pages/PendingJobs';
 import Help from './pages/Help';
 import Contact from './pages/Contact';
 
-
 // User Management Pages
-import UserList from './pages/users/UserList'; // <-- IMPORTAR
-import UserCreateEdit from './pages/users/UserCreateEdit'; // <-- IMPORTAR
-import UserDetail from './pages/users/UserDetail'; // <-- IMPORTAR
-
+import UserList from './pages/users/UserList';
+import UserCreateEdit from './pages/users/UserCreateEdit';
+import UserDetail from './pages/users/UserDetail';
 
 // Componentes de ejemplo
 const PrintJobs = () => <div className="p-6">Trabajos de Impresión</div>;
@@ -42,8 +49,7 @@ function App() {
           {/* Rutas de autenticación */}
           <Route path="/login" element={<Login />} />
           
-          
-          {/* Rutas protegidas con layout */}
+          {/* Rutas protegidas con layout de usuario normal */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout><Outlet /></Layout>}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -58,7 +64,7 @@ function App() {
               
               {/* Rutas solo para administradores y técnicos */}
               <Route element={<ProtectedRoute requiredRoles={['ADM', 'TEC']} />}>
-                <Route path="/users" element={<UserList />} /> {/* <-- COMPONENTE REAL */}
+                <Route path="/users" element={<UserList />} />
                 <Route path="/users/create" element={<UserCreateEdit />} />
                 <Route path="/users/edit/:id" element={<UserCreateEdit />} />
                 <Route path="/users/:id" element={<UserDetail />} />
@@ -69,6 +75,18 @@ function App() {
               <Route element={<ProtectedRoute requiredRoles={['ADM']} />}>
                 <Route path="/settings" element={<Settings />} />
               </Route>
+            </Route>
+          </Route>
+
+          {/* RUTAS ESPECÍFICAS DE ADMINISTRADOR */}
+          <Route element={<ProtectedRoute requiredRoles={['ADM']} />}>
+            <Route path="/admin/*" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="printers" element={<AdminPrinters />} />
+              <Route path="print-jobs" element={<AdminPrintJobs />} />
+              <Route path="reports" element={<AdminReports />} />
+              <Route path="settings" element={<AdminSettings />} />
             </Route>
           </Route>
 
