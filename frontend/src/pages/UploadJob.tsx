@@ -239,7 +239,7 @@ const UploadJob: React.FC = () => {
         reset();
         setSelectedFile(null);
         setUploadProgress(0);
-        navigate('/dashboard/my-jobs');
+        navigate('/dashboard');
       }, 2000);
 
     } catch (err: any) {
