@@ -1790,7 +1790,22 @@ class PrintJobViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return Response(serializer.data) 
+    @action(detail=False, methods=['get'])
+    def history(self, request):
+        queryset = self.get_queryset().filter(
+        user=request.user,
+        status__in=[JobStatus.COMPLETED, JobStatus.FAILED, 
+                   JobStatus.CANCELLED, JobStatus.REJECTED]
+    ).order_by('-completed_at', '-created_at')
+    
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+    
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def pending(self, request):

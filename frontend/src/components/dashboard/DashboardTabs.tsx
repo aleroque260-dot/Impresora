@@ -1,4 +1,4 @@
-// src/pages/dashboard/components/DashboardTabs.tsx
+// src/pages/dashboard/components/DashboardTabs.tsx - VERSIÓN CORREGIDA
 import React from 'react';
 import { RefreshCw, Eye, Trash2, Download } from 'lucide-react';
 import { BarChart3, Clock, History, Printer } from 'lucide-react';
@@ -21,7 +21,9 @@ const formatTime = (minutes: number): string => {
   return `${hours}h ${mins}m`;
 };
 
-const formatWeight = (grams: number): string => {
+const formatWeight = (grams: number | undefined): string => {
+  if (!grams && grams !== 0) return "0 g"; // Verificación de undefined/null
+  
   if (grams >= 1000) {
     return `${(grams / 1000).toFixed(2)} kg`;
   }
@@ -110,7 +112,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
               }`}
             >
               <Clock className="h-4 w-4 inline mr-2" />
-              Pendientes ({stats.pending})
+              Pendientes ({(stats?.pending || 0)})
             </button>
             <button
               onClick={() => onTabChange('history')}
@@ -121,7 +123,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
               }`}
             >
               <History className="h-4 w-4 inline mr-2" />
-              Historial ({stats.completed})
+              Historial ({(stats?.completed || 0)})
             </button>
             <button
               onClick={() => onTabChange('printers')}
@@ -153,7 +155,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
               </button>
             </div>
             
-            {jobs.length === 0 ? (
+            {(!jobs || jobs.length === 0) ? (
               <div className="text-center py-12">
                 <p className="text-gray-600 mb-6">No hay trabajos de impresión</p>
               </div>
@@ -197,7 +199,9 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
                           </div>
                         </td>
                         <td className="py-4 px-4">
-                          <div className="font-medium text-gray-900">${job.cost.toFixed(2)}</div>
+                          <div className="font-medium text-gray-900">
+                            ${(job.cost || 0).toFixed(2)} {/* CORREGIDO */}
+                          </div>
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center space-x-2">
@@ -222,7 +226,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
         {activeTab === 'pending' && (
           <div>
             <h3 className="text-xl font-bold text-gray-900 mb-6">Impresiones Pendientes</h3>
-            {jobs.filter(job => ['PENDING', 'APPROVED', 'PRINTING'].includes(job.status)).length === 0 ? (
+            {(!jobs || jobs.filter(job => ['PENDING', 'APPROVED', 'PRINTING'].includes(job.status)).length === 0) ? (
               <div className="text-center py-12">
                 <p className="text-gray-600">No hay impresiones pendientes</p>
               </div>
@@ -253,7 +257,9 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
                         </div>
                         <div className="flex justify-between">
                           <span>Costo estimado:</span>
-                          <span className="font-bold text-gray-900">${job.cost.toFixed(2)}</span>
+                          <span className="font-bold text-gray-900">
+                            ${(job.cost || 0).toFixed(2)} {/* CORREGIDO */}
+                          </span>
                         </div>
                       </div>
                       
@@ -289,7 +295,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {jobs
-                    .filter(job => ['COMPLETED', 'FAILED', 'CANCELLED'].includes(job.status))
+                    ?.filter(job => ['COMPLETED', 'FAILED', 'CANCELLED'].includes(job.status))
                     .map(job => (
                       <tr key={job.id} className="hover:bg-gray-50 transition-colors">
                         <td className="py-4 px-4">
@@ -318,7 +324,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
                         </td>
                         <td className="py-4 px-4">
                           <div className={`font-medium ${job.status === 'COMPLETED' ? 'text-gray-900' : 'text-gray-400'}`}>
-                            ${job.cost.toFixed(2)}
+                            ${(job.cost || 0).toFixed(2)} {/* CORREGIDO */}
                           </div>
                         </td>
                         <td className="py-4 px-4 text-sm text-gray-600">
@@ -338,7 +344,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
           <div>
             <h3 className="text-xl font-bold text-gray-900 mb-6">Impresoras 3D Disponibles</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {printers.map(printer => (
+              {printers?.map(printer => (
                 <div key={printer.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-4">
                     <div>
@@ -368,7 +374,7 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
                     <div>
                       <label className="block text-sm font-medium text-gray-500 mb-1">Materiales</label>
                       <div className="flex flex-wrap gap-1">
-                        {printer.supported_materials.slice(0, 3).map(material => (
+                        {printer.supported_materials?.slice(0, 3).map(material => (
                           <span key={material} className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs">
                             {material}
                           </span>
@@ -381,11 +387,15 @@ const DashboardTabs: React.FC<DashboardTabsProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div className="bg-gray-50 p-2 rounded">
                           <div className="text-gray-600">Por hora</div>
-                          <div className="font-bold">${printer.cost_per_hour.toFixed(2)}/h</div>
+                          <div className="font-bold">
+                            ${(printer.cost_per_hour || 0).toFixed(2)}/h {/* CORREGIDO */}
+                          </div>
                         </div>
                         <div className="bg-gray-50 p-2 rounded">
                           <div className="text-gray-600">Por gramo</div>
-                          <div className="font-bold">${printer.cost_per_gram.toFixed(2)}/g</div>
+                          <div className="font-bold">
+                            ${(printer.cost_per_gram || 0).toFixed(2)}/g {/* CORREGIDO */}
+                          </div>
                         </div>
                       </div>
                     </div>

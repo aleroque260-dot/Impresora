@@ -29,9 +29,15 @@ const api: AxiosInstance = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('access_token');
+        console.log('Interceptor - Token:', token); // DEBUG
+    console.log('Interceptor - URL:', config.url); 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+           console.log('Interceptor - Header set:', config.headers.Authorization); 
+    } else {
+      console.log('Interceptor - No token or headers'); // DEBUG
     }
+    
     return config;
   },
   (error: AxiosError) => {
@@ -135,7 +141,7 @@ export const calculateEstimatedCost = (data: {
 
 // ========== ENDPOINTS DE TRABAJOS PENDIENTES ==========
 export const getAllPendingJobs = (params?: any) => 
-  api.get('/print-jobs/all-pending/', { params });
+  api.get('/print-jobs/pending/', { params });
 export const getJobsForReview = (params?: any) => 
   api.get('/print-jobs/for-review/', { params });
 export const approveJob = (id: number, data?: any) => 

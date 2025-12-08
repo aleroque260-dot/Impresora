@@ -3,32 +3,30 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
 import { Printer, FileText, CheckCircle, XCircle, Clock, AlertCircle, Eye, Filter, Search, RefreshCw } from 'lucide-react';
 
-// Interfaces
+// Interfaces CORREGIDAS
 interface PrintJob {
   id: number;
   job_id: string;
   file_name: string;
-  user: {
-    id: number;
-    username: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-  };
-  printer: {
+  user: number;  // Solo ID del usuario
+  user_name?: string;  // Campos separados
+  user_email?: string;
+  printer?: {
     id: number;
     name: string;
     location: string;
   } | null;
   status: string;
+  status_display?: string;
   material_type: string;
+  material_display?: string;
   estimated_hours: number;
-  estimated_cost: number;
+  estimated_cost?: number;
   created_at: string;
-  approved_at: string | null;
-  assigned_at: string | null;
-  assignment_reason: string;
-  notes: string;
+  approved_at?: string | null;
+  assigned_at?: string | null;
+  assignment_reason?: string;
+  notes?: string;
 }
 
 interface Printer {
@@ -48,7 +46,7 @@ const AdminPrintJobs: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   // Estados para filtros
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('PEN'); // Por defecto pendientes
   const [searchTerm, setSearchTerm] = useState('');
   
   // Estados para asignación
@@ -64,19 +62,61 @@ const AdminPrintJobs: React.FC = () => {
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewing, setReviewing] = useState(false);
 
+  // Función helper para obtener datos de usuario
+  const getUserInfo = (job: PrintJob) => {
+    return {
+      id: job.user,
+      name: job.user_name || `Usuario ${job.user}`,
+      email: job.user_email || 'Sin email',
+      username: job.user_name?.split(' ')[0] || `user_${job.user}`
+    };
+  };
+
   // Cargar trabajos
   const fetchJobs = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      let url = '/print-jobs/';
+      let url = 'print-jobs/';
+      const params = new URLSearchParams();
+      
       if (statusFilter !== 'all') {
-        url += `?status=${statusFilter}`;
+        params.append('status', statusFilter);
       }
       
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+      
+      console.log('🔍 Fetching from:', url);
       const response = await api.get(url);
-      setJobs(response.data.results || response.data);
+      
+      // DEBUG: Ver estructura de datos
+      console.log('📊 Respuesta API:', response.data);
+      
+      // Manejar diferentes formatos de respuesta
+      let jobsData: PrintJob[] = [];
+      if (response.data.results) {
+        // Formato paginado
+        jobsData = response.data.results;
+        console.log(`📋 Total trabajos: ${response.data.count}, Esta página: ${jobsData.length}`);
+      } else if (Array.isArray(response.data)) {
+        // Formato array simple
+        jobsData = response.data;
+        console.log(`📋 Total trabajos: ${jobsData.length}`);
+      }
+      
+      // Validar estructura de datos
+      if (jobsData.length > 0) {
+        const firstJob = jobsData[0];
+        console.log('🔍 Estructura del primer trabajo:', firstJob);
+        console.log('🔍 Tipo de "user":', typeof firstJob.user);
+        console.log('🔍 Tiene user_name?:', 'user_name' in firstJob);
+        console.log('🔍 Tiene user_email?:', 'user_email' in firstJob);
+      }
+      
+      setJobs(jobsData);
     } catch (err: any) {
       setError(err.message || 'Error al cargar trabajos');
       console.error('Error fetching jobs:', err);
@@ -172,7 +212,7 @@ const AdminPrintJobs: React.FC = () => {
     }
   };
 
-  // 4. ASIGNAR IMPRESORA (APP → ASS) - ¡LA QUE NECESITAS!
+  // 4. ASIGNAR IMPRESORA (APP → ASS)
   const handleAssignPrinter = async () => {
     if (!selectedJob || !selectedPrinterId) {
       alert('Selecciona una impresora');
@@ -182,7 +222,6 @@ const AdminPrintJobs: React.FC = () => {
     try {
       setAssigning(true);
       
-      // LLAMADA AL ENDPOINT QUE YA EXISTE
       const response = await api.post(`/assign/${selectedJob.job_id}/`, {
         printer_id: selectedPrinterId,
         reason: assignmentReason
@@ -215,14 +254,17 @@ const AdminPrintJobs: React.FC = () => {
     setShowAssignModal(true);
   };
 
-  // 6. Filtrar trabajos
+  // 6. Filtrar trabajos - CORREGIDO
   const filteredJobs = jobs.filter(job => {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
+      const userInfo = getUserInfo(job);
+      
       return (
         job.file_name.toLowerCase().includes(term) ||
-        job.user.username.toLowerCase().includes(term) ||
-        job.job_id.toLowerCase().includes(term)
+        userInfo.name.toLowerCase().includes(term) ||
+        userInfo.username.toLowerCase().includes(term) ||
+        (job.job_id && job.job_id.toLowerCase().includes(term))
       );
     }
     return true;
@@ -238,6 +280,17 @@ const AdminPrintJobs: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // 8. Formatear costo
+  const formatCost = (cost?: number) => {
+    if (!cost) return 'N/A';
+    return new Intl.NumberFormat('es-CU', {
+      style: 'currency',
+      currency: 'CUP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(cost);
   };
 
   if (loading) {
@@ -333,7 +386,7 @@ const AdminPrintJobs: React.FC = () => {
         </div>
       </div>
 
-      {/* TABLA DE TRABAJOS */}
+      {/* TABLA DE TRABAJOS - CORREGIDA */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -368,132 +421,138 @@ const AdminPrintJobs: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredJobs.map((job) => (
-                  <tr key={job.id} className="hover:bg-gray-50">
-                    {/* ID y Archivo */}
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          #{job.job_id.substring(0, 8)}
+                filteredJobs.map((job) => {
+                  const userInfo = getUserInfo(job);
+                  const jobIdDisplay = job.job_id ? `#${job.job_id.substring(0, 8)}...` : `ID-${job.id}`;
+                  
+                  return (
+                    <tr key={job.id} className="hover:bg-gray-50">
+                      {/* ID y Archivo */}
+                      <td className="px-6 py-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {jobIdDisplay}
+                          </div>
+                          <div className="text-sm text-gray-500 truncate max-w-xs">
+                            <FileText className="inline h-3 w-3 mr-1" />
+                            {job.file_name}
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-500 truncate max-w-xs">
-                          <FileText className="inline h-3 w-3 mr-1" />
-                          {job.file_name}
-                        </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Usuario */}
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">{job.user.username}</div>
-                      <div className="text-xs text-gray-500">{job.user.email}</div>
-                    </td>
+                      {/* Usuario - CORREGIDO */}
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">{userInfo.name}</div>
+                        <div className="text-xs text-gray-500">{userInfo.email}</div>
+                      </td>
 
-                    {/* Estado */}
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
-                        {getStatusLabel(job.status)}
-                      </span>
-                      {job.printer && (
-                        <div className="text-xs text-gray-600 mt-1">
-                          <Printer className="inline h-3 w-3 mr-1" />
-                          {job.printer.name}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Detalles */}
-                    <td className="px-6 py-4">
-                      <div className="text-sm">
-                        <span className="text-gray-600">{job.material_type}</span>
-                        <span className="mx-2">•</span>
-                        <span className="text-gray-600">{job.estimated_hours}h</span>
-                        {job.estimated_cost && (
-                          <>
-                            <span className="mx-2">•</span>
-                            <span className="text-gray-600">${job.estimated_cost}</span>
-                          </>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Fecha */}
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {formatDate(job.created_at)}
-                    </td>
-
-                    {/* ACCIONES - ¡LO MÁS IMPORTANTE! */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-2">
-                        {/* Botón Ver */}
-                        <button
-                          className="p-1 text-gray-500 hover:text-gray-700"
-                          title="Ver detalles"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-
-                        {/* ACCIONES SEGÚN ESTADO */}
-                        {job.status === 'PEN' && (
-                          <button
-                            onClick={() => handleSendToReview(job.id)}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                          >
-                            Revisar
-                          </button>
-                        )}
-
-                        {job.status === 'URV' && (
-                          <>
-                            <button
-                              onClick={() => handleApproveJob(job.id)}
-                              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                            >
-                              <CheckCircle className="inline h-3 w-3 mr-1" />
-                              Aprobar
-                            </button>
-                            <button
-                              onClick={() => {
-                                const reason = prompt('Motivo del rechazo:');
-                                if (reason) handleRejectJob(job.id, reason);
-                              }}
-                              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                            >
-                              <XCircle className="inline h-3 w-3 mr-1" />
-                              Rechazar
-                            </button>
-                          </>
-                        )}
-
-                        {job.status === 'APP' && (
-                          <button
-                            onClick={() => openAssignModal(job)}
-                            className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
-                          >
+                      {/* Estado */}
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                          {getStatusLabel(job.status)}
+                        </span>
+                        {job.printer && (
+                          <div className="text-xs text-gray-600 mt-1">
                             <Printer className="inline h-3 w-3 mr-1" />
-                            Asignar Impresora
-                          </button>
+                            {job.printer.name}
+                          </div>
                         )}
+                      </td>
 
-                        {job.status === 'ASS' && (
+                      {/* Detalles */}
+                      <td className="px-6 py-4">
+                        <div className="text-sm">
+                          <span className="text-gray-600">{job.material_display ||job.material_type}</span>
+                          <span className="mx-2">•</span>
+                          <span className="text-gray-600">{job.estimated_hours}h</span>
+                          {job.estimated_cost && (
+                            <>
+                              <span className="mx-2">•</span>
+                              <span className="text-gray-600">{formatCost(job.estimated_cost)}</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Fecha */}
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {formatDate(job.created_at)}
+                      </td>
+
+                      {/* ACCIONES */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-2">
+                          {/* Botón Ver */}
                           <button
-                            className="px-3 py-1 bg-indigo-600 text-white text-sm rounded"
-                            disabled
+                            className="p-1 text-gray-500 hover:text-gray-700"
+                            title="Ver detalles"
+                            onClick={() => console.log('Ver detalles', job.id)}
                           >
-                            Asignado
+                            <Eye className="h-4 w-4" />
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+
+                          {/* ACCIONES SEGÚN ESTADO */}
+                          {job.status === 'PEN' && (
+                            <button
+                              onClick={() => handleSendToReview(job.id)}
+                              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                            >
+                              Revisar
+                            </button>
+                          )}
+
+                          {job.status === 'URV' && (
+                            <>
+                              <button
+                                onClick={() => handleApproveJob(job.id)}
+                                className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                              >
+                                <CheckCircle className="inline h-3 w-3 mr-1" />
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const reason = prompt('Motivo del rechazo:');
+                                  if (reason) handleRejectJob(job.id, reason);
+                                }}
+                                className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                              >
+                                <XCircle className="inline h-3 w-3 mr-1" />
+                                Rechazar
+                              </button>
+                            </>
+                          )}
+
+                          {job.status === 'APP' && (
+                            <button
+                              onClick={() => openAssignModal(job)}
+                              className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                            >
+                              <Printer className="inline h-3 w-3 mr-1" />
+                              Asignar Impresora
+                            </button>
+                          )}
+
+                          {job.status === 'ASS' && (
+                            <button
+                              className="px-3 py-1 bg-indigo-600 text-white text-sm rounded"
+                              disabled
+                            >
+                              Asignado
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL PARA ASIGNAR IMPRESORA - ¡NUEVO! */}
+      {/* MODAL PARA ASIGNAR IMPRESORA */}
       {showAssignModal && selectedJob && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -506,7 +565,7 @@ const AdminPrintJobs: React.FC = () => {
                 <span className="font-medium">Archivo:</span> {selectedJob.file_name}
               </p>
               <p className="text-sm text-gray-600 mb-2">
-                <span className="font-medium">Usuario:</span> {selectedJob.user.username}
+                <span className="font-medium">Usuario:</span> {getUserInfo(selectedJob).name}
               </p>
               <p className="text-sm text-gray-600 mb-4">
                 <span className="font-medium">Tiempo estimado:</span> {selectedJob.estimated_hours} horas

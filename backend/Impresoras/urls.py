@@ -1,4 +1,4 @@
-# Impresoras/urls.py - VERSIÓN COMPLETAMENTE CORREGIDA
+# Impresoras/urls.py - VERSIÓN CORREGIDA
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
@@ -12,8 +12,8 @@ router.register(r'profiles', views.UserProfileViewSet, basename='userprofile')
 router.register(r'printers', views.PrinterViewSet, basename='printer')
 router.register(r'assignments', views.UserPrinterAssignmentViewSet, basename='assignment')
 router.register(r'pricing-configs', views.PricingConfigViewSet, basename='pricingconfig')
-router.register(r'user-pricing-profiles', views.UserPricingProfileViewSet, basename='userpricingprofile')  # ¡CORREGIDO!
-router.register(r'print-jobs', views.PrintJobViewSet, basename='printjob')
+router.register(r'user-pricing-profiles', views.UserPricingProfileViewSet, basename='userpricingprofile')
+router.register(r'print-jobs', views.PrintJobViewSet, basename='printjob')  # Esto crea rutas automáticas
 router.register(r'logs', views.SystemLogViewSet, basename='systemlog')
 
 urlpatterns = [
@@ -31,11 +31,17 @@ urlpatterns = [
     # Endpoint alternativo para actualizar perfil
     path('users/update-profile/', UserProfileUpdateView.as_view(), name='user-update-profile'),
     
-    # Endpoints adicionales específicos
-    path('print-jobs/my-jobs/', views.PrintJobViewSet.as_view({'get': 'list'}), name='my-jobs'),
-    path('print-jobs/pending/', views.PrintJobViewSet.as_view({'get': 'pending_jobs'}), name='pending-jobs'),
+    # ⚠️ NO necesitas estas rutas porque el router ya las crea
+    # ELIMINA estas líneas:
+    # path('print-jobs/my-jobs/', views.PrintJobViewSet.as_view({'get': 'list'}), name='my-jobs'),
+    # path('print-jobs/pending/', views.PrintJobViewSet.as_view({'get': 'pending_jobs'}), name='pending-jobs'),
     
-      path('user-pricing-profiles/me/', 
+    # ENDPOINTS CORRECTOS (con @action decorator):
+    # El router automáticamente crea: /api/print-jobs/my_jobs/ desde @action
+    # El router automáticamente crea: /api/print-jobs/pending/ desde @action
+    
+    # User Pricing Profiles endpoints
+    path('user-pricing-profiles/me/', 
          views.UserPricingProfileViewSet.as_view({'get': 'me'}), 
          name='userpricingprofile-me'),
     

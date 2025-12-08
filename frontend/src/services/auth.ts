@@ -102,9 +102,9 @@ export const authService = {
           return ['ADM', 'TEC', 'PRO', 'EST', 'EXT'];
         case 'TEC':
           return ['TEC', 'EST', 'PRO', 'EXT'];
-        case 'PRO':
+        case 'TEA':
           return ['PRO', 'EST'];
-        case 'EST':
+        case 'STU':
           return ['EST'];
         case 'EXT':
           return ['EXT'];
