@@ -84,25 +84,30 @@ class PrintJobUploadSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         file = validated_data.pop('file')
         job_name = validated_data.pop('job_name', None)
-        
-        # Crear trabajo de impresión
+        # Validar archivo
+        allowed_extensions = ['.stl', '.obj', '.gcode', '.3mf', '.zip']
+        file_ext = os.path.splitext(file.name)[1].lower()
+    
+        if file_ext not in allowed_extensions:
+             raise serializers.ValidationError({
+            "file": f"Formato no permitido. Use: {', '.join(allowed_extensions)}"
+        })
+    
+        # Crear PrintJob
         print_job = PrintJob.objects.create(
-            user=request.user,
-            file_name=file.name,
-            file_size=file.size,
-            file_url=f"/media/print_jobs/{uuid.uuid4()}_{file.name}",
-            status=JobStatus.PENDING,
-            **validated_data
-        )
-        
+        user=request.user,
+        file_name=file.name,
+        file_size=file.size,
+        file_url=f"/media/print_jobs/{uuid.uuid4()}_{file.name}",
+        status=JobStatus.PENDING,
+             **validated_data
+    )
+    
         # Asignar nombre si se proporcionó
         if job_name:
-            print_job.notes = job_name
-            print_job.save()
-        
-        # Guardar archivo (si tu modelo lo soporta)
-        # Si no, solo guardamos la URL
-        
+         print_job.notes = job_name
+        print_job.save()
+    
         return print_job
 
 class PrintJobListSerializer(serializers.ModelSerializer):

@@ -201,6 +201,13 @@ const UploadJob: React.FC = () => {
     setSuccess('');
 
     try {
+            console.log('=== DEBUG UPLOAD ===');
+      console.log('1. Selected file:', selectedFile);
+      console.log('2. File name:', selectedFile.name);
+      console.log('3. File size:', selectedFile.size);
+      console.log('4. File type:', selectedFile.type);
+      console.log('5. User:', user?.username);
+      console.log('6. Form data:', data);
       // Configurar FormData
       const formData = new FormData();
       formData.append('file', selectedFile);

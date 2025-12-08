@@ -1,3 +1,4 @@
+import { handleApiError } from './../services/api';
 // src/hooks/useNavigation.ts
 import { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -63,21 +64,21 @@ export const useNavigation = () => {
       },
       { 
         name: 'Mis Trabajos', 
-        href: '/my-jobs', 
+        href: '/active-jobs', 
         icon: FileText, 
         roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL], 
         isAdmin: false 
       },
       { 
         name: 'Pendientes', 
-        href: '/pending', 
+        href: '/pending-jobs', 
         icon: Clock, 
         roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL], 
         isAdmin: false 
       },
       { 
         name: 'Historial', 
-        href: '/history', 
+        href: '/job-history', 
         icon: History, 
         roles: [UserRole.STUDENT, UserRole.TEACHER, UserRole.EXTERNAL], 
         isAdmin: false 
